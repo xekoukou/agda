@@ -6,7 +6,6 @@ module Agda.TypeChecking.Unquote where
 
 import Control.Applicative
 import Control.Monad.State (runState, get, put)
-import Control.Monad.Writer (execWriterT, tell)
 import Control.Monad.Trans (lift)
 
 import Data.Char

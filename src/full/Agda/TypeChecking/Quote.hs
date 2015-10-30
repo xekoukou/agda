@@ -5,9 +5,6 @@
 module Agda.TypeChecking.Quote where
 
 import Control.Applicative
-import Control.Monad.State (runState, get, put)
-import Control.Monad.Writer (execWriterT, tell)
-import Control.Monad.Trans (lift)
 
 import Data.Char
 import Data.Maybe (fromMaybe)

@@ -18,7 +18,6 @@ import Prelude hiding (null)
 
 import Control.Applicative hiding (empty)
 import Control.Monad.Reader
-import Control.Monad.Writer
 import Control.Monad.State
 
 import Data.Foldable (Foldable)

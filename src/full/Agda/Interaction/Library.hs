@@ -10,7 +10,8 @@ module Agda.Interaction.Library
 import Control.Arrow (first, second)
 import Control.Applicative
 import Control.Exception
-import Control.Monad.Writer
+import Control.Monad.Trans
+import Control.Monad.Writer.Class
 import Data.Char
 import Data.Either
 import Data.Function
@@ -23,6 +24,7 @@ import System.Environment
 import Agda.Interaction.Library.Base
 import Agda.Interaction.Library.Parse
 import Agda.Utils.Monad
+import Agda.Utils.CPSWriter
 import Agda.Utils.Environment
 import Agda.Utils.Except ( ExceptT, runExceptT, MonadError(throwError) )
 import Agda.Utils.List
@@ -137,14 +139,14 @@ formatLibError _ (OtherError err) = return $ text err
 libraryIncludePaths :: Maybe FilePath -> [AgdaLibFile] -> [LibName] -> LibM [FilePath]
 libraryIncludePaths overrideLibFile libs xs0 = mkLibM libs $ do
     file <- getLibrariesFile overrideLibFile
-    return $ runWriter ((dot ++) . incs <$> find file [] xs)
+    return $ runCPSWriter ((dot ++) . incs <$> find file [] xs)
   where
     xs = map trim $ delete "." xs0
     trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace
     incs = nub . concatMap libIncludes
     dot = [ "." | elem "." xs0 ]
 
-    find :: FilePath -> [LibName] -> [LibName] -> Writer [LibError] [AgdaLibFile]
+    find :: FilePath -> [LibName] -> [LibName] -> CPSWriter [LibError] [AgdaLibFile]
     find _ _ [] = pure []
     find file visited (x : xs)
       | elem x visited = find file visited xs

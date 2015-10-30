@@ -18,6 +18,7 @@ import Control.Monad.Reader
 import Control.Monad.Writer
 
 import Agda.TypeChecking.Monad.Base
+import Agda.Utils.CPSWriter
 import Agda.Utils.Except ( Error(strMsg), MonadError(catchError, throwError) )
 
 newtype ExceptionT err m a = ExceptionT { runExceptionT :: m (Either err a) }
@@ -47,6 +48,10 @@ instance (Monad m, MonadException err m) => MonadException err (ReaderT r m) whe
   throwException = lift . throwException
   catchException m h = ReaderT $ \ r ->
     catchException (m `runReaderT` r) (\ err -> h err `runReaderT` r)
+
+instance (Monad m, Monoid w, MonadException err m) => MonadException err (CPSWriterT w m) where
+  throwException     = lift . throwException
+  catchException m h = cpsWriterT $ catchException (runCPSWriterT m) $ runCPSWriterT . h
 
 instance (Monad m, MonadException err m, Monoid w) => MonadException err (WriterT w m) where
   throwException = lift . throwException

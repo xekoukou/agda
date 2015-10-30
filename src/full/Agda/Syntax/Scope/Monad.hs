@@ -14,7 +14,6 @@ import Prelude hiding (mapM)
 import Control.Arrow (first, second)
 import Control.Applicative
 import Control.Monad hiding (mapM)
-import Control.Monad.Writer hiding (mapM)
 import Control.Monad.State hiding (mapM)
 
 import Data.List as List

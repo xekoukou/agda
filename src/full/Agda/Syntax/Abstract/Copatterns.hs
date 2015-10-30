@@ -29,6 +29,7 @@ import Agda.Syntax.Position
 import Agda.Syntax.Scope.Monad
 
 import Agda.TypeChecking.Monad.Base (TypeError(..), typeError)
+import Agda.Utils.CPSWriter
 import Agda.Utils.Either
 import Agda.Utils.Tuple
 
@@ -373,10 +374,10 @@ instance (Rename a, Rename b) => Rename (a, b) where
 -- | Alpha-Equivalence of patterns, ignoring dot patterns
 class Alpha t where
   alpha :: t -> t -> Maybe NameMap
-  alpha t t' = fmap snd $ runWriterT $ alpha' t t'
+  alpha t t' = fmap snd $ runCPSWriterT $ alpha' t t'
 
-  alpha' :: t -> t -> WriterT NameMap Maybe ()
-  alpha' t t' = WriterT $ fmap ((),) $ alpha t t'
+  alpha' :: t -> t -> CPSWriterT NameMap Maybe ()
+  alpha' t t' = cpsWriterT $ fmap ((),) $ alpha t t'
 
 instance Alpha Name where
   alpha' x x' = tell1 (x, x')

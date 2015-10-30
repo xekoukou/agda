@@ -440,6 +440,7 @@ library
                     Agda.Utils.Update
                     Agda.Utils.VarSet
                     Agda.Utils.Warshall
+                    Agda.Utils.CPSWriter
                     Agda.Version
 
   other-modules:    Paths_Agda

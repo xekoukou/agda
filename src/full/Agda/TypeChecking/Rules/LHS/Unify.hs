@@ -21,8 +21,9 @@ import Control.Applicative hiding (empty)
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Monad.Writer (WriterT(..), MonadWriter(..), Monoid(..))
+import Control.Monad.Writer.Class
 
+import Data.Monoid ()
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)
@@ -62,6 +63,7 @@ import Agda.Interaction.Options (optInjectiveTypeConstructors, optWithoutK)
 import Agda.TypeChecking.Rules.LHS.Problem
 -- import Agda.TypeChecking.SyntacticEquality
 
+import Agda.Utils.CPSWriter
 import Agda.Utils.Except
   ( Error(noMsg, strMsg)
   , MonadError(catchError, throwError)
@@ -88,7 +90,7 @@ data UnificationResult' a
 -- | Monad for unification.
 newtype Unify a = U { unUnify ::
   ReaderT UnifyEnv (
-  WriterT UnifyOutput (
+  CPSWriterT UnifyOutput (
   ExceptionT UnifyException (
   StateT UnifyState TCM))) a
   } deriving ( Monad, MonadIO, Functor, Applicative
@@ -526,7 +528,7 @@ unifyIndices flex a us vs = liftTCM $ do
           , nest 2 $ prettyList $ map prettyTCM vs
           , nest 2 $ text "context: " <+> (prettyTCM =<< getContextTelescope)
           ]
-    (r, USt s eqs) <- flip runStateT emptyUState . runExceptionT . runWriterT . flip runReaderT emptyUEnv . unUnify $ do
+    (r, USt s eqs) <- flip runStateT emptyUState . runExceptionT . runCPSWriterT . flip runReaderT emptyUEnv . unUnify $ do
         ifClean (unifyConstructorArgs (Hom a) us vs)
           -- clean: continue unifying
           recheckConstraints

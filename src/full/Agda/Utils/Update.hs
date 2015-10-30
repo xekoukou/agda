@@ -16,10 +16,12 @@ module Agda.Utils.Update
 import Control.Applicative
 import Control.Monad.Identity
 import Control.Monad.Trans
-import Control.Monad.Writer.Strict
+import Control.Monad.Writer.Class
 
+import Data.Monoid
 import Data.Traversable (Traversable(..), traverse)
 
+import Agda.Utils.CPSWriter
 import Agda.Utils.Tuple
 
 -- * Change monad.
@@ -30,7 +32,7 @@ class Monad m => MonadChange m where
   listenDirty :: m a -> m (a, Bool)
 
 -- | The @ChangeT@ monad transformer.
-newtype ChangeT m a = ChangeT { fromChangeT :: WriterT Any m a }
+newtype ChangeT m a = ChangeT { fromChangeT :: CPSWriterT Any m a }
   deriving (Functor, Applicative, Monad, MonadTrans)
 
 instance Monad m => MonadChange (ChangeT m) where
@@ -52,7 +54,7 @@ type Updater a = a -> Change a
 -- BEGIN REAL STUFF
 
 -- | The @Change@ monad.
-newtype Change a = Change { fromChange :: Writer Any a }
+newtype Change a = Change { fromChange :: CPSWriter Any a }
   deriving (Functor, Applicative, Monad)
 
 instance MonadChange Change where
@@ -63,7 +65,7 @@ instance MonadChange Change where
 
 -- | Run a 'Change' computation, returning result plus change flag.
 runChange :: Change a -> (a, Bool)
-runChange = mapSnd getAny . runWriter . fromChange
+runChange = mapSnd getAny . runCPSWriter . fromChange
 
 -- | Blindly run an updater.
 runUpdater :: Updater a -> a -> (a, Bool)
@@ -92,7 +94,7 @@ sharing f a = do
 
 -- | Eval an updater (using 'sharing').
 evalUpdater :: Updater a -> EndoFun a
-evalUpdater f a = fst $ runWriter $ fromChange $ sharing f a
+evalUpdater f a = fst $ runCPSWriter $ fromChange $ sharing f a
 
 -- END REAL STUFF
 

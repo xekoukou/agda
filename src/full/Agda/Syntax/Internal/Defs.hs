@@ -4,12 +4,14 @@
 module Agda.Syntax.Internal.Defs where
 
 import Control.Monad.Reader
-import Control.Monad.Writer
+import Control.Monad.Writer.Class
 
 import qualified Data.Foldable as Fold
 
 import Agda.Syntax.Common
 import Agda.Syntax.Internal
+
+import Agda.Utils.CPSWriter
 
 -- | @getDefs' lookup emb a@ extracts all used definitions
 --   (functions, data/record types) from @a@, embedded into a monoid via @emb@.
@@ -19,10 +21,10 @@ import Agda.Syntax.Internal
 --   Note that @emb@ can also choose to discard a used definition
 --   by mapping to the unit of the monoid.
 getDefs' :: (GetDefs a, Monoid b) => (MetaId -> Maybe Term) -> (QName -> b) -> a -> b
-getDefs' lookup emb = execWriter . (`runReaderT` GetDefsEnv lookup emb) . getDefs
+getDefs' lookup emb = execCPSWriter . (`runReaderT` GetDefsEnv lookup emb) . getDefs
 
 -- | Inputs to and outputs of @getDefs'@ are organized as a monad.
-type GetDefsM b = ReaderT (GetDefsEnv b) (Writer b)
+type GetDefsM b = ReaderT (GetDefsEnv b) (CPSWriter b)
 
 data GetDefsEnv b = GetDefsEnv
   { lookupMeta :: MetaId -> Maybe Term

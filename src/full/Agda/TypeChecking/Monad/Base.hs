@@ -21,7 +21,6 @@ import qualified Control.Concurrent as C
 import Control.Exception as E
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Monad.Writer
 import Control.Monad.Trans.Maybe
 import Control.Applicative hiding (empty)
 
@@ -30,6 +29,7 @@ import Data.Int
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
+import Data.Monoid
 import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map -- hiding (singleton, null, empty)
@@ -71,6 +71,7 @@ import Agda.Interaction.Highlighting.Precise
 import qualified Agda.Compiler.JS.Syntax as JS
 import qualified Agda.Compiler.UHC.Pragmas.Base as CR
 
+import Agda.Utils.CPSWriter
 import Agda.Utils.Except
   ( Error(strMsg)
   , ExceptT
@@ -2311,8 +2312,9 @@ instance MonadTCM tcm => MonadTCM (ListT tcm) where
 instance (Error err, MonadTCM tcm) => MonadTCM (ExceptT err tcm) where
   liftTCM = lift . liftTCM
 
-instance (Monoid w, MonadTCM tcm) => MonadTCM (WriterT w tcm) where
+instance (Monoid w, MonadTCM tcm) => MonadTCM (CPSWriterT w tcm) where
   liftTCM = lift . liftTCM
+
 
 {- The following is not possible since MonadTCM needs to be a
 -- MonadState TCState and a MonadReader TCEnv

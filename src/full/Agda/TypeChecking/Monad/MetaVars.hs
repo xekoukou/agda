@@ -7,7 +7,7 @@ module Agda.TypeChecking.Monad.MetaVars where
 import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Monad.Writer
+import Control.Monad.Writer.Class
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -27,6 +27,7 @@ import Agda.TypeChecking.Substitute
 
 import Agda.Utils.Functor ((<.>))
 import Agda.Utils.Lens
+import Agda.Utils.CPSWriter
 import Agda.Utils.Maybe
 import Agda.Utils.Monad
 import Agda.Utils.Permutation
@@ -342,9 +343,9 @@ withFreezeMetas cont = do
 
 -- | Freeze all meta variables and return the list of metas that got frozen.
 freezeMetas :: TCM [MetaId]
-freezeMetas = execWriterT $ stMetaStore %== Map.traverseWithKey freeze
+freezeMetas = execCPSWriterT $ stMetaStore %== Map.traverseWithKey freeze
   where
-  freeze :: Monad m => MetaId -> MetaVariable -> WriterT [MetaId] m MetaVariable
+  freeze :: Monad m => MetaId -> MetaVariable -> CPSWriterT [MetaId] m MetaVariable
   freeze m mvar
     | mvFrozen mvar == Frozen = return mvar
     | otherwise = do

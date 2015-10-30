@@ -6,8 +6,10 @@ module Agda.TypeChecking.SizedTypes where
 
 import Prelude hiding (null)
 
-import Control.Monad.Writer
+import Control.Monad
+import Control.Monad.Writer.Class
 
+import Data.Monoid
 import Data.List hiding (null)
 import qualified Data.Map as Map
 
@@ -27,6 +29,7 @@ import {-# SOURCE #-} Agda.TypeChecking.Constraints
 import Agda.Utils.Except ( MonadError(catchError, throwError) )
 import Agda.Utils.List as List
 import Agda.Utils.Maybe
+import Agda.Utils.CPSWriter
 import Agda.Utils.Monad
 import Agda.Utils.Null
 import Agda.Utils.Size
@@ -120,13 +123,13 @@ checkSizeVarNeverZero i = do
   ts <- map (snd . unDom) . take i <$> getContext
   -- If we encountered a blocking meta in the context, we cannot
   -- say ``no'' for sure.
-  (n, Any meta) <- runWriterT $ minSizeValAux ts $ repeat 0
+  (n, Any meta) <- runCPSWriterT $ minSizeValAux ts $ repeat 0
   if n > 0 then return True else
     if meta then patternViolation else return False
   where
   -- Compute the least valuation for size context ts above the
   -- given valuation and return its last value.
-  minSizeValAux :: [Type] -> [Int] -> WriterT Any TCM Int
+  minSizeValAux :: [Type] -> [Int] -> CPSWriterT Any TCM Int
   minSizeValAux _        []      = __IMPOSSIBLE__
   minSizeValAux []       (n : _) = return n
   minSizeValAux (t : ts) (n : ns) = do
