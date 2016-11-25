@@ -1,0 +1,74 @@
+-- A BNFC Grammar for Dedukti
+
+Program.     Program ::= Prelude [Line];
+
+Prelude.     Prelude ::= "#NAME" Id ".";
+
+Decl.        Line    ::= Head ":" Term "." ;
+Def.         Line    ::= Head ":=" Term "." ;
+DefWithType. Line    ::= Head ":" Term ":=" Term "." ;
+Rules.       Line    ::= [Rule] ".";
+Command.     Line    ::= Command;
+
+terminator Line "";
+
+DefYes.      DefOpt  ::= "def";
+DefNo.       DefOpt  ::= ;
+
+Head.        Head    ::= DefOpt Id [Param];
+OpaqueHead.  Head    ::= "{" DefOpt Id [Param] "}";
+
+Param.       Param   ::= "(" Id ":" Term ")";
+VarUntyped.  VarDecl ::= Id;
+VarTyped.    VarDecl ::= Id ":" Term;
+
+terminator Param "";
+separator VarDecl ",";
+
+Rule.        Rule    ::= "[" [VarDecl] "]" Term "-->" Term;
+separator nonempty Rule "";
+
+Atom.        Term2   ::= Id;
+Type.        Term2   ::= "Type";
+
+App.         Term1   ::= Term1 Term2;
+
+Pi.          Term   ::= Id ":" Term1 "->" Term;
+Fun.         Term   ::= Term1 "->" Term;
+LamTyped.    Term   ::= Id ":" Term1 "=>" Term;
+LamUntyped.  Term   ::= Id "=>" Term;
+
+coercions Term 2;
+
+CmdWhnf.     Command ::= "#WHNF"  Term ".";
+CmdHnf.      Command ::= "#HNF"   Term ".";
+CmdSnf.      Command ::= "#SNF"   Term ".";
+CmdStep.     Command ::= "#STEP"  Term ".";
+CmdConv.     Command ::= "#CONV"  Term "," Term ".";
+CmdCheck.    Command ::= "#CHECK" Term Term ".";
+CmdInfer.    Command ::= "#INFER" Term ".";
+
+-- Identifiers
+position token Id ( letter | digit | '_' )+ ;
+
+comment "(;" ";)";
+
+
+
+
+-- Trash:
+------------------------------------------------------------------------
+
+-- Rule.        Rule    ::= "[" [VarDecl] "]" QIdent [Pattern] "-->" Term;
+
+-- Qual.        QIdent  ::= Ident "." Ident;
+
+-- AtomP.       Pattern ::= QIdent;
+-- WildP.       Pattern ::= "_";
+-- ConP.        Pattern ::= "(" QIdent [Pattern] ")";
+
+-- separator Pattern "";
+
+-- QName.       QIdent  ::= QIdent;
+-- QWild.       QIdent  ::= "_";
+-- QWWild.      QIdent  ::= "__";

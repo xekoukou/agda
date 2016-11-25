@@ -1,0 +1,25 @@
+#NAME SubjectReduction.
+
+Empty : Type.
+Unit : Type.
+triv : Unit.
+
+(;
+def Unit : Type.
+[] Unit --> Empty.
+
+def f : Unit -> Empty.
+[x] f x --> x.
+
+def absurd : Empty := triv.
+;)
+
+def A : Type.
+[] A --> Unit.
+[] A --> Empty.
+
+def f : A -> Empty.
+[x] f x --> x.
+
+def h : (A -> A) -> Unit -> Empty.
+[y] h y --> y.

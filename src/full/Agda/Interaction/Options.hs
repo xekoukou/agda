@@ -102,6 +102,7 @@ data CommandLineOptions = Options
   , optGhcCompile       :: Bool
   , optGhcCallGhc       :: Bool
   , optGhcFlags         :: [String]
+  , optDeduktiCompile   :: Bool
   , optEpicCompile      :: Bool
   , optJSCompile        :: Bool
   , optUHCCompile       :: Bool
@@ -199,6 +200,7 @@ defaultOptions = Options
   , optGhcCompile       = False
   , optGhcCallGhc       = True
   , optGhcFlags         = []
+  , optDeduktiCompile   = False
   , optEpicCompile      = False
   , optJSCompile        = False
   , optUHCCompile       = False
@@ -283,13 +285,13 @@ type Flag opts = opts -> OptM opts
 
 checkOpts :: Flag CommandLineOptions
 checkOpts opts
-  | not (atMostOne [optAllowUnsolved . p, \x -> optGhcCompile x]) = throwError
+  | not (atMostOne [optAllowUnsolved . p, optGhcCompile]) = throwError
       "Unsolved meta variables are not allowed when compiling.\n"
   | optCompileNoMain opts && (not (optGhcCompile opts || optUHCCompile opts)) = throwError
       "--no-main only allowed in combination with --compile.\n"
   | not (atMostOne [optGHCiInteraction, isJust . optInputFile]) =
       throwError "Choose at most one: input file or --interaction.\n"
-  | not (atMostOne $ interactive ++ [\x -> optGhcCompile x, optEpicCompile, optJSCompile]) =
+  | not (atMostOne $ interactive ++ [optGhcCompile, optDeduktiCompile, optEpicCompile, optJSCompile]) =
       throwError "Choose at most one: compilers/--interactive/--interaction.\n"
   | not (atMostOne $ interactive ++ [optGenerateHTML]) =
       throwError "Choose at most one: --html/--interactive/--interaction.\n"
@@ -475,6 +477,9 @@ ghcDontCallGhcFlag o = return $ o { optGhcCallGhc = False }
 ghcFlag :: String -> Flag CommandLineOptions
 ghcFlag f o = return $ o { optGhcFlags = optGhcFlags o ++ [f] }
 
+compileDeduktiFlag :: Flag CommandLineOptions
+compileDeduktiFlag o = return $ o { optDeduktiCompile = True }
+
 -- The Epic backend has been removed. See Issue 1481.
 compileEpicFlag :: Flag CommandLineOptions
 -- compileEpicFlag o = return $ o { optEpicCompile = True}
@@ -580,6 +585,7 @@ standardOptions =
                     "give the flag GHC-FLAG to GHC when compiling using the GHC backend"
     , Option []     ["no-main"] (NoArg compileFlagNoMain)
                     "when compiling using the GHC backend or the UHC backend (experimental), do not treat the requested module as the main module of a program"
+    , Option []     ["dedukti"] (NoArg compileDeduktiFlag) "compile program using the Dedukti backend"
 
     -- The Epic backend has been removed. See Issue 1481.
     , Option []     ["epic"] (NoArg compileEpicFlag)

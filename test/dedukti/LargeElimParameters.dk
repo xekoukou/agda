@@ -1,0 +1,50 @@
+#NAME LargeElim .
+Empty : Type .
+Unit : Type .
+unit : Unit .
+Bool : Type .
+true : Bool .
+false : Bool .
+
+Nat : Type .
+zero : Nat .
+suc : Nat -> Nat .
+
+def leq : Nat -> Nat -> Bool .
+[y]leq zero y --> true .
+[x]leq (suc x)zero --> false .
+[x, y]leq (suc x)(suc y)--> leq x y .
+
+def True : Bool -> Type .
+[] True true --> Unit .
+[] True false --> Empty .
+
+def refl : x : Nat -> True (leq x x).
+[] refl zero --> unit .
+[x]refl (suc x)--> refl x .
+
+def trans : x : Nat -> y : Nat -> z : Nat -> True (leq x y)-> True (leq y z)-> True (leq x z).
+[y, z]trans zero y z _ _ --> unit .
+[x, y, z, p, q]trans (suc x)(suc y)(suc z)p q --> trans x y z p q .
+
+Set : Type.
+def El  : Set -> Type.
+
+t_unit : Set.
+[] El t_unit --> Unit.
+
+t_empty : Set.
+[] El t_empty --> Empty.
+
+def t_true : Bool -> Set.
+[] t_true true  --> t_unit.
+[] t_true false --> t_empty.
+
+Either (A : Set) (B : Set) : Type .
+inl (A : Set) (B : Set) : El A -> Either A B .
+inr (A : Set) (B : Set) : El B -> Either A B .
+
+def total : x : Nat -> y : Nat -> Either (t_true (leq x y)) (t_true (leq y x)) .
+[y]total zero y       --> inl t_unit (t_true (leq y zero)) unit .
+[x]total (suc x) zero --> inr t_empty t_unit unit .
+[x, y]total (suc x)(suc y)--> total x y .

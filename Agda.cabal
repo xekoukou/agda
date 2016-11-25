@@ -210,6 +210,9 @@ library
                     Agda.Benchmarking
                     Agda.Compiler.CallCompiler
                     Agda.Compiler.Common
+                    Agda.Compiler.Dedukti.Compiler
+                    Agda.Compiler.Dedukti.Syntax
+                    Agda.Compiler.Dedukti.Print
                     Agda.Compiler.Epic.AuxAST
                     Agda.Compiler.Epic.CaseOpts
                     Agda.Compiler.Epic.Compiler

@@ -45,3 +45,4 @@ test/succeed/EpicNat
 test/succeed/Issue1441
 exec-test*
 pkg-build*
+/src/full/Agda/Compiler/Dedukti/BNFC/

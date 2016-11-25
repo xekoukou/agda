@@ -36,6 +36,7 @@ import Agda.Compiler.MAlonzo.Compiler as MAlonzo
 import Agda.Compiler.Epic.Compiler as Epic
 import Agda.Compiler.JS.Compiler as JS
 import Agda.Compiler.UHC.Compiler as UHC
+import qualified Agda.Compiler.Dedukti.Compiler as Dedukti
 
 import Agda.Utils.Lens
 import Agda.Utils.Monad
@@ -97,6 +98,7 @@ runAgdaWithOptions generateHTML progName opts
           epic          = optEpicCompile     opts
           js            = optJSCompile       opts
           uhc           = optUHCCompile      opts
+          dedukti       = optDeduktiCompile  opts
       when i $ liftIO $ putStr splashScreen
       let failIfNoInt (Just i) = return i
           -- The allowed combinations of command-line
@@ -112,6 +114,7 @@ runAgdaWithOptions generateHTML progName opts
                       | ghc && compileNoMain
                                       = (MAlonzo.compilerMain NotMain =<<) . (failIfNoInt =<<)
                       | ghc           = (MAlonzo.compilerMain IsMain =<<) . (failIfNoInt =<<)
+                      | dedukti       = (Dedukti.compilerMain =<<) . (failIfNoInt =<<)
                       | epic          = (Epic.compilerMain    =<<) . (failIfNoInt =<<)
                       | js            = (JS.compilerMain      =<<) . (failIfNoInt =<<)
                       | uhc && compileNoMain
