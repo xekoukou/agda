@@ -143,7 +143,7 @@ instance PatternFrom Term NLPat where
              id <- (!! i') <$> getContextId
              if ok then return (PVar (Just id) i' bvs) else done
            Nothing -> done
-      Lam i t  -> PLam i <$> patternFrom r k t
+      Lam i t  -> PLam (getArgInfo i) <$> patternFrom r k t
       Lit{}    -> done
       Def f es | isIrrelevant r -> done
       Def f es -> do
@@ -358,7 +358,7 @@ instance Match NLPat Term where
                     match r gamma k qs vs
                   _ -> no (text "")
           Lam i u -> do
-            let pbody = PDef f (raiseNLP 1 ps ++ [Apply $ Arg i $ PTerm (var 0)])
+            let pbody = PDef f (raiseNLP 1 ps ++ [Apply $ Arg (getArgInfo i) $ PTerm (var 0)])
                 body  = absBody u
             match r gamma (ExtendTel dummyDom (Abs (absName u) k)) pbody body
           MetaV m es -> do
@@ -390,7 +390,7 @@ instance Match NLPat Term where
               match r gamma k qs vs
             _ -> no (text "")
         Lam info u -> do
-          let pbody = PBoundVar i (raiseNLP 1 ps ++ [Apply $ Arg info $ PTerm (var 0)])
+          let pbody = PBoundVar i (raiseNLP 1 ps ++ [Apply $ Arg (getArgInfo info) $ PTerm (var 0)])
               body  = absBody u
           match r gamma (ExtendTel dummyDom (Abs (absName u) k)) pbody body
         MetaV m es -> matchingBlocked $ Blocked m ()

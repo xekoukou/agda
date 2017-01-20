@@ -92,7 +92,12 @@ match' ((c, es, patch) : stack) = do
           -- Andreas, 2013-05-21 why introduce sharing only here,
           -- and not in underapplied case also?
           (es0, es1)     = splitAt n $ map (fmap $ fmap shared) es
-          lam x t        = Lam (argInfo x) (Abs (unArg x) t)
+          -- Andreas, 2017-01-20: A lambda resulting from a computation with
+          -- compiled clauses is untyped, because the clause compiler is not
+          -- type-aware and does not compute correct types.
+          -- For issue #1515, this is not a big problem since a SIZELT lambda
+          -- we want to termination-check is usually not the result of a computation.
+          lam x t        = untypedLam (argInfo x) (Abs (unArg x) t)
 
       -- splitting on the @n@th elimination
       Case (Arg _ n) bs -> do

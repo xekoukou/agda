@@ -522,7 +522,7 @@ frommyExp (NotM e) =
    frommyExps ndrop as (h name [])
   Lam hid (Abs mid t) -> do
    t' <- frommyExp t
-   return $ I.Lam (icnvh hid) (I.Abs (case mid of {NoId -> "x"; Id id -> id}) t')
+   return $ I.untypedLam (icnvh hid) (I.Abs (case mid of {NoId -> "x"; Id id -> id}) t')
   Pi _ hid _ x (Abs mid y) -> do
    x' <- frommyType x
    y' <- frommyType y
@@ -534,7 +534,7 @@ frommyExp (NotM e) =
   Sort UnknownSort -> return $ I.Sort (I.mkType 0) -- hoping that it's thrown away
 
   AbsurdLambda hid ->
-   return $ I.Lam (icnvh hid) (I.Abs abslamvarname (I.Var 0 []))
+   return $ I.untypedLam (icnvh hid) (I.Abs abslamvarname (I.Var 0 []))
 
 
 frommyExps :: Nat -> MArgList O -> I.Term -> ExceptT String IO I.Term

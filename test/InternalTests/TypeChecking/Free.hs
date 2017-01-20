@@ -63,7 +63,7 @@ prop_maxVarOcc_bot = identity botVarOcc maxVarOcc
 
 prop_freeIn = all (0 `freeIn`)
   [ var 0
-  , Lam defaultArgInfo $ Abs "x" $ var 1
+  , untypedLam defaultArgInfo $ Abs "x" $ var 1
   , Sort $ varSort 0
   ]
 

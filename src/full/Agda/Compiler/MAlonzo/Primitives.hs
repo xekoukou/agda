@@ -240,7 +240,7 @@ primBody s = maybe unimplemented (either (hsVarUQ . HS.Ident) id <$>) $
   opty t = t ++ "->" ++ t ++ "->" ++ t
   unimplemented = typeError $ NotImplemented s
 
-  lam x t = Lam (setHiding Hidden defaultArgInfo) (Abs x t)
+  lam x t = untypedLam (setHiding Hidden defaultArgInfo) (Abs x t)
 
 noCheckCover :: QName -> TCM Bool
 noCheckCover q = (||) <$> isBuiltin q builtinNat <*> isBuiltin q builtinInteger

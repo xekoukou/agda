@@ -61,7 +61,7 @@ etaExpand def@(Def n ts) = do
         toEta = fromIntegral $ len - length ts
         term  = raise toEta def `applys` map var (downFrom toEta)
         info  = setOrigin Inserted defaultArgInfo
-    return $ foldr (\ v t -> Lam info (Abs v t)) term $ replicate toEta "staticVar"
+    return $ foldr (\ v t -> untypedLam info (Abs v t)) term $ replicate toEta "staticVar"
 etaExpand x = return x
 
 class Evaluate a where

@@ -256,7 +256,7 @@ instance Free Term where
     Var n ts   -> variable n `mappend` do weakly <$> freeVars' ts
     -- λ is not considered guarding, as
     -- we cannot prove that x ≡ λy.x is impossible.
-    Lam _ t    -> freeVars' t
+    Lam a t    -> freeVars' (a, t)
     Lit _      -> mempty
     Def _ ts   -> weakly <$> freeVars' ts  -- because we are not in TCM
       -- we cannot query whether we are dealing with a data/record (strongly r.)

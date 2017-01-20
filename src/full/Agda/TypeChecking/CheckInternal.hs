@@ -140,7 +140,7 @@ checkInternal' action v t = do
     Lit l      -> Lit l <$ ((`subtype` t) =<< litType l)
     Lam ai vb  -> do
       (a, b) <- shouldBePi t
-      checkArgInfo ai $ domInfo a
+      checkArgInfo (getArgInfo ai) $ domInfo a
       addContext (suggest vb b, a) $ do
         Lam ai . Abs (absName vb) <$> checkInternal' action (absBody vb) (absBody b)
     Pi a b     -> do

@@ -7,6 +7,7 @@ module Agda.TypeChecking.Serialise.Instances.Internal where
 import Control.Applicative
 import Control.Monad.State.Strict
 
+import Agda.Syntax.Common (getArgInfo)
 import Agda.Syntax.Internal as I
 import Agda.Syntax.Position as P
 
@@ -95,7 +96,7 @@ instance (EmbPrj a) => EmbPrj (I.Abs a) where
 instance EmbPrj I.Term where
   icod_ (Var     a []) = icode1' a
   icod_ (Var      a b) = icode2 0 a b
-  icod_ (Lam      a b) = icode2 1 a b
+  icod_ (Lam      a b) = icode2 1 (getArgInfo a) b
   icod_ (Lit      a  ) = icode1 2 a
   icod_ (Def      a b) = icode2 3 a b
   icod_ (Con    a b c) = icode3 4 a b c
@@ -110,7 +111,7 @@ instance EmbPrj I.Term where
     valu' xs       = gets mkShared <*> valu xs
     valu [a]       = valu1 var   a
     valu [0, a, b] = valu2 Var   a b
-    valu [1, a, b] = valu2 Lam   a b
+    valu [1, a, b] = valu2 untypedLam a b
     valu [2, a]    = valu1 Lit   a
     valu [3, a, b] = valu2 Def   a b
     valu [4, a, b, c] = valu3 Con a b c

@@ -846,7 +846,7 @@ instance Normalise Term where
                 MetaV x vs  -> MetaV x <$> normalise' vs
                 Lit _       -> return v
                 Level l     -> levelTm <$> normalise' l
-                Lam h b     -> Lam h <$> normalise' b
+                Lam h b     -> uncurry Lam <$> normalise' (h,b)
                 Sort s      -> sortTm <$> normalise' s
                 Pi a b      -> uncurry Pi <$> normalise' (a,b)
                 Shared{}    -> updateSharedTerm normalise' v
@@ -1011,7 +1011,7 @@ instance InstantiateFull Term where
           MetaV x vs  -> MetaV x <$> instantiateFull' vs
           Lit _       -> return v
           Level l     -> levelTm <$> instantiateFull' l
-          Lam h b     -> Lam h <$> instantiateFull' b
+          Lam h b     -> uncurry Lam <$> instantiateFull' (h,b)
           Sort s      -> sortTm <$> instantiateFull' s
           Pi a b      -> uncurry Pi <$> instantiateFull' (a,b)
           Shared{}    -> updateSharedTerm instantiateFull' v

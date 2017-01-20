@@ -299,7 +299,7 @@ instance GenC Term where
       piF   = freq (piFreq   . termFreqs)
 
       genLam :: Gen Term
-      genLam = Lam <$> (flip setHiding defaultArgInfo <$> genC conf) <*> genC (isntTypeConf $ decrConf conf)
+      genLam = untypedLam <$> (flip setHiding defaultArgInfo <$> genC conf) <*> genC (isntTypeConf $ decrConf conf)
 
       genPi :: Gen Term
       genPi = uncurry Pi <$> genC conf
@@ -474,8 +474,8 @@ instance ShrinkC Term Term where
                     ((\(c,vs) -> Con c ci vs) <$> shrinkC conf (ConName c, NoType args))
     Lit l        -> Lit <$> shrinkC conf l
     Level l      -> [] -- TODO
-    Lam info b   -> killAbs b : ((\(h,x) -> Lam (setHiding h defaultArgInfo) x)
-                                 <$> shrinkC conf (argInfoHiding info, b))
+    Lam info b   -> killAbs b : ((\(h,x) -> untypedLam (setHiding h defaultArgInfo) x)
+                                 <$> shrinkC conf (getHiding info, b))
     Pi a b       -> unEl (unDom a) : unEl (killAbs b) :
                     (uncurry Pi <$> shrinkC conf (a, b))
     Sort s       -> Sort <$> shrinkC conf s

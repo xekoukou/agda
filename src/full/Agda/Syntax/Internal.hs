@@ -115,7 +115,7 @@ instance LensConName ConHead where
 --     list of clauses.
 --
 data Term = Var {-# UNPACK #-} !Int Elims -- ^ @x es@ neutral
-          | Lam ArgInfo (Abs Term)        -- ^ Terms are beta normal. Relevance is ignored
+          | Lam LamInfo (Abs Term)        -- ^ Terms are beta normal. Relevance is ignored
           | Lit Literal
           | Def QName Elims               -- ^ @f es@, possibly a delta/iota-redex
           | Con ConHead ConInfo Args      -- ^ @c vs@ or @record { fs = vs }@
@@ -132,6 +132,25 @@ data Term = Var {-# UNPACK #-} !Int Elims -- ^ @x es@ neutral
   deriving (Typeable, Show)
 
 type ConInfo = ConOrigin
+
+-- | We retain SIZELT types at lambdas for termination checking,
+--   but don't serialize them.
+type LamInfo = Arg (Maybe Type)
+
+untypedLamInfo :: ArgInfo -> LamInfo
+untypedLamInfo ai = Arg ai Nothing
+
+untypedLam :: ArgInfo -> Abs Term -> Term
+untypedLam = Lam . untypedLamInfo
+
+typedLamInfo :: ArgInfo -> Type -> LamInfo
+typedLamInfo ai = Arg ai . Just
+
+typedLam :: ArgInfo -> Type -> Abs Term -> Term
+typedLam ai t = Lam $ typedLamInfo ai t
+
+domLam :: Dom Type -> Abs Term -> Term
+domLam (Dom ai t) = typedLam ai t
 
 -- | Eliminations, subsuming applications and projections.
 --

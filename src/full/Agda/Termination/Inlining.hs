@@ -238,5 +238,5 @@ expandWithFunctionCall f es = do
           es' = raise pad es ++ map (Apply . defaultArg . var) (downFrom pad)
       Just disp <- displayForm f es'
       let info = setOrigin Inserted defaultArgInfo
-      return $ foldr (\_ -> Lam info . Abs "") (dtermToTerm disp) (replicate pad ())
+      return $ foldr (\_ -> untypedLam info . Abs "") (dtermToTerm disp) (replicate pad ())
     _ -> __IMPOSSIBLE__

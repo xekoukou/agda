@@ -443,7 +443,7 @@ reduceTm env !constInfo allowNonTerminating hasRewriting zero suc = reduceB' 0
                 useStrictSubst = rem steps strictEveryNth == 0
                 doSubst es t = strictSubst useStrictSubst (reverse $ map (unArg . argFromElim . ignoreReduced) es) t
                 (es0, es1) = splitAt n es
-                lam x t    = Lam (argInfo x) (Abs (unArg x) t)
+                lam x t    = untypedLam (argInfo x) $ Abs (unArg x) t
 
             -- splitting on the @n@th elimination
             FCase n bs -> {-# SCC "match'Case" #-}

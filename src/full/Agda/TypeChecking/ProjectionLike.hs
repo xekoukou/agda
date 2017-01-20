@@ -106,7 +106,7 @@ elimView loneProjToLambda v = do
   case pv of
     NoProjection{}        -> return v
     LoneProjectionLike f ai
-      | loneProjToLambda  -> return $ Lam ai $ Abs "r" $ Var 0 [Proj ProjPrefix f]
+      | loneProjToLambda  -> return $ untypedLam ai $ Abs "r" $ Var 0 [Proj ProjPrefix f]
       | otherwise         -> return v
     ProjectionView f a es -> (`applyE` (Proj ProjPrefix f : es)) <$> elimView loneProjToLambda (unArg a)
 

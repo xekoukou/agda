@@ -670,7 +670,7 @@ instance Subst Term Term where
   applySubst IdS t = t
   applySubst rho t    = case t of
     Var i es    -> lookupS rho i `applyE` applySubst rho es
-    Lam h m     -> Lam h $ applySubst rho m
+    Lam h m     -> Lam (applySubst rho h) $ applySubst rho m
     Def f es    -> defApp f [] $ applySubst rho es
     Con c ci vs -> Con c ci $ applySubst rho vs
     MetaV x es  -> MetaV x $ applySubst rho es
@@ -884,13 +884,13 @@ projDropParsApply (Projection prop d r _ lams) o args =
     -- (projection applied already to record value).
     Nothing -> if proper then Def d $ map Apply args else __IMPOSSIBLE__
     Just (pars, Arg i y) ->
-      let core = if proper then Lam i $ Abs y $ Var 0 [Proj o d]
-                           else Lam i $ Abs y $ Def d [Apply $ Var 0 [] <$ r] -- Issue2226: get ArgInfo for principal argument from projFromType
+      let core = if proper then untypedLam i $ Abs y $ Var 0 [Proj o d]
+                           else untypedLam i $ Abs y $ Def d [Apply $ Var 0 [] <$ r] -- Issue2226: get ArgInfo for principal argument from projFromType
       -- Now drop pars many args
           (pars', args') = dropCommon pars args
       -- We only have to abstract over the parameters that exceed the arguments.
       -- We only have to apply to the arguments that exceed the parameters.
-      in List.foldr (\ (Arg ai x) -> Lam ai . NoAbs x) (core `apply` args') pars'
+      in List.foldr (\ (Arg ai x) -> untypedLam ai . NoAbs x) (core `apply` args') pars'
   where proper = isJust prop
 
 ---------------------------------------------------------------------------
@@ -944,7 +944,7 @@ mkPi (Dom info (x, a)) b = el $ Pi (Dom info a) (mkAbs x b)
 
 -- | @mkLam dom v = teleLam (telFromList [dom] v@
 mkLam :: Dom (ArgName, Type) -> Term -> Term
-mkLam (Dom info (x, a)) v = Lam info (Abs x v)
+mkLam (Dom info (x, a)) v = typedLam info a (Abs x v)
 
 telePi' :: (Abs Type -> Abs Type) -> Telescope -> Type -> Type
 telePi' reAbs = telePi where
@@ -981,14 +981,14 @@ telePi_ (ExtendTel u tel) t = el $ Pi u b
 --   The implementation is sound because 'Telescope' does not use 'NoAbs'.
 teleLam :: Telescope -> Term -> Term
 teleLam  EmptyTel         t = t
-teleLam (ExtendTel u tel) t = Lam (domInfo u) $ flip teleLam t <$> tel
+teleLam (ExtendTel u tel) t = domLam u $ flip teleLam t <$> tel
 
 -- | Performs void ('noAbs') abstraction over telescope.
 class TeleNoAbs a where
   teleNoAbs :: a -> Term -> Term
 
 instance TeleNoAbs ListTel where
-  teleNoAbs tel t = foldr (\ (Dom ai (x, _)) -> Lam ai . NoAbs x) t tel
+  teleNoAbs tel t = foldr (\ (Dom ai (x, a)) -> typedLam ai a . NoAbs x) t tel
 
 instance TeleNoAbs Telescope where
   teleNoAbs tel = teleNoAbs $ telToList tel
@@ -1044,7 +1044,7 @@ instance Ord a => Ord (Type' a) where
 -- | Syntactic 'Term' equality, ignores stuff below @DontCare@ and sharing.
 instance Eq Term where
   Var x vs   == Var x' vs'   = x == x' && vs == vs'
-  Lam h v    == Lam h' v'    = h == h' && v  == v'
+  Lam h v    == Lam h' v'    = getArgInfo h == getArgInfo h' && v  == v'  -- ignore type ann.
   Lit l      == Lit l'       = l == l'
   Def x vs   == Def x' vs'   = x == x' && vs == vs'
   Con x _ vs == Con x' _ vs' = x == x' && vs == vs'

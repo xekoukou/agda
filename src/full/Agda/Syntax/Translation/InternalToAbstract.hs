@@ -405,7 +405,7 @@ reifyTerm expandAnonDefs0 v = do
 --    I.Lam info b | isAbsurdBody b -> return $ A. AbsurdLam noExprInfo $ getHiding info
     I.Lam info b    -> do
       (x,e) <- reify b
-      return $ A.Lam noExprInfo (DomainFree info x) e
+      return $ A.Lam noExprInfo (DomainFree (getArgInfo info) x) e
       -- Andreas, 2011-04-07 we do not need relevance information at internal Lambda
     I.Lit l        -> reify l
     I.Level l      -> reify l
@@ -992,7 +992,7 @@ instance Reify Sort Expr where
           return $ A.Def sizeU
         I.DLub s1 s2 -> do
           lub <- freshName_ ("dLub" :: String) -- TODO: hack
-          (e1,e2) <- reify (s1, I.Lam defaultArgInfo $ fmap Sort s2)
+          (e1,e2) <- reify (s1, I.untypedLam defaultArgInfo $ fmap Sort s2)
           let app x y = A.App noExprInfo x (defaultNamedArg y)
           return $ A.Var lub `app` e1 `app` e2
 

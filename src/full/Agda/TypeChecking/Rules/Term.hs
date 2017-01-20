@@ -370,7 +370,7 @@ checkLambda (Arg info (A.TBind _ xs typ)) body target = do
         -- check.
         (pid, argT) <- newProblem $ isTypeEqualTo typ a
         v <- add (notInScopeName y) (Dom (setRelevance r' info) argT) $ checkExpr body btyp
-        blockTermOnProblem target (Lam info $ Abs (nameToArgName x) v) pid
+        blockTermOnProblem target (typedLam info argT $ Abs (nameToArgName x) v) pid
       where
         [WithHiding h x] = xs
         -- Andreas, Issue 630: take name from function type if lambda name is "_"
@@ -406,7 +406,7 @@ checkPostponedLambda args@(Arg info (WithHiding h x : xs, mt)) body target = do
                 | otherwise  = addContext' (x, dom)
     v <- add (maybe dom (dom $>) mt) $
       checkPostponedLambda (Arg info (xs, mt)) body $ absBody b
-    let v' = Lam info' $ Abs (nameToArgName x) v
+    let v' = typedLam info' (unDom dom) $ Abs (nameToArgName x) v
     maybe (return v') (blockTermOnProblem t v') mpid
 
 
@@ -437,7 +437,7 @@ insertHiddenLambdas h target postpone ret = do
           if visible h' then typeError $ WrongHidingInLambda target else do
             -- Otherwise, we found a hidden argument that we can insert.
             let x = absName b
-            Lam (domInfo dom) . Abs x <$> do
+            domLam dom . Abs x <$> do
               addContext' (x, dom) $ insertHiddenLambdas h (absBody b) postpone ret
 
       _ -> typeError . GenericDocError =<< do

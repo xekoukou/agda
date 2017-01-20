@@ -266,7 +266,7 @@ instance Occurs Term where
                   abort (strongly ctx) $ MetaCannotDependOn m (takeRelevant xs) i
                 -- is a singleton type with unique inhabitant sv
                 Right (Just sv) -> return $ sv `applyE` es
-          Lam h f     -> Lam h <$> occ (leaveTop ctx) f
+          Lam h f     -> uncurry Lam <$> occ (leaveTop ctx) (h,f)
           Level l     -> Level <$> occ ctx l  -- stay in Top
           Lit l       -> return v
           DontCare v  -> dontCare <$> occurs red Irrel m (goIrrelevant xs) v
@@ -327,7 +327,7 @@ instance Occurs Term where
     v <- instantiate v
     case v of
       Var i vs   -> metaOccurs m vs
-      Lam h f    -> metaOccurs m f
+      Lam h f    -> metaOccurs m (h,f)
       Level l    -> metaOccurs m l
       Lit l      -> return ()
       DontCare v -> metaOccurs m v
@@ -592,7 +592,7 @@ instance FoldRigid Term where
     b <- liftTCM $ reduceB t
     case ignoreSharing $ ignoreBlocking b of
       Var i es   -> f i `mappend` fold es
-      Lam _ t    -> fold t
+      Lam a t    -> fold t  -- NOT!?: fold (a,t)
       Lit{}      -> mempty
       Def _ es   -> case b of
         Blocked{}                   -> mempty
@@ -655,6 +655,9 @@ instance FoldRigid a => FoldRigid (Elim' a) where
   foldRigid f Proj{}    = mempty
 
 instance FoldRigid a => FoldRigid [a] where
+  foldRigid f = foldMap $ foldRigid f
+
+instance FoldRigid a => FoldRigid (Maybe a) where
   foldRigid f = foldMap $ foldRigid f
 
 instance (FoldRigid a, FoldRigid b) => FoldRigid (a,b) where

@@ -69,7 +69,7 @@ etaExpandClause clause = liftTCM $ do
     peekLambdas :: Term -> [Arg ArgName]
     peekLambdas v =
       case ignoreSharing v of
-        Lam info b -> Arg info (absName b) : peekLambdas (unAbs b)
+        Lam info b -> Arg (getArgInfo info) (absName b) : peekLambdas (unAbs b)
         _ -> []
 
     -- Use the names of the first argument, and set the Origin all other
