@@ -101,16 +101,17 @@ isEtaExpandable kinds x = do
 --   The instantiation should not be an 'InstV' and the 'MetaId'
 --   should point to something 'Open' or a 'BlockedConst'.
 --   Further, the meta variable may not be 'Frozen'.
-assignTerm :: MetaId -> [Arg ArgName] -> Term -> TCM ()
+assignTerm :: MetaId -> ListTel -> Term -> TCM ()
 assignTerm x tel v = do
      -- verify (new) invariants
     whenM (isFrozen x) __IMPOSSIBLE__
     assignTerm' x tel v
 
 -- | Skip frozen check.  Used for eta expanding frozen metas.
-assignTerm' :: MetaId -> [Arg ArgName] -> Term -> TCM ()
+assignTerm' :: MetaId -> ListTel -> Term -> TCM ()
 assignTerm' x tel v = do
-    reportSLn "tc.meta.assign" 70 $ prettyShow x ++ " := " ++ show v ++ "\n  in " ++ show tel
+    reportSLn "tc.meta.assign" 70 $
+      prettyShow x ++ " := " ++ show v ++ "\n  in " ++ show (telToArgs tel)
      -- verify (new) invariants
     whenM (not <$> asks envAssignMetas) __IMPOSSIBLE__
 
@@ -500,7 +501,7 @@ etaExpandMeta kinds m = whenM (isEtaExpandable kinds m) $ do
                   -- Andreas, 2012-03-29: No need for occurrence check etc.
                   -- we directly assign the solution for the meta
                   -- 2012-05-23: We also bypass the check for frozen.
-                  noConstraints $ assignTerm' m (telToArgs tel) u  -- should never produce any constraints
+                  noConstraints $ assignTerm' m (telToList tel) u  -- should never produce any constraints
           if Records `elem` kinds then
             expand
            else if (SingletonRecords `elem` kinds) then do
@@ -517,7 +518,7 @@ etaExpandMeta kinds m = whenM (isEtaExpandable kinds m) $ do
           reportSLn "tc.meta.eta" 20 $ "Expanding level meta to 0 (type-in-type)"
           -- Andreas, 2012-03-30: No need for occurrence check etc.
           -- we directly assign the solution for the meta
-          noConstraints $ assignTerm m (telToArgs tel) (Level $ Max [])
+          noConstraints $ assignTerm m (telToList tel) (Level $ Max [])
        ) $ {- else -} dontExpand
       _ -> dontExpand
 
@@ -903,7 +904,7 @@ assignMeta' m x t n ids v = do
     -- Perform the assignment (and wake constraints).
     reportSDoc "tc.meta.assign" 10 $
       text "solving" <+> prettyTCM x <+> text ":=" <+> prettyTCM (abstract tel' v')
-    assignTerm x (telToArgs tel') v'
+    assignTerm x (telToList tel') v'
 
 
 -- | Turn the assignment problem @_X args <= SizeLt u@ into

@@ -216,7 +216,7 @@ solveConstraint_ (UnBlock m)                =
         ifNotM unblock (addConstraint $ UnBlock m) $ do
           tel <- getContextTelescope
           v   <- liftTCM $ checkTypeCheckingProblem prob
-          assignTerm m (telToArgs tel) v
+          assignTerm m (telToList tel) v
       -- Andreas, 2009-02-09, the following were IMPOSSIBLE cases
       -- somehow they pop up in the context of sized types
       --

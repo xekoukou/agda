@@ -942,8 +942,9 @@ mkPi (Dom info (x, a)) b = el $ Pi (Dom info a) (mkAbs x b)
   where
     el = El $ dLub (getSort a) (Abs x (getSort b)) -- dLub checks x freeIn
 
-mkLam :: Arg ArgName -> Term -> Term
-mkLam a v = Lam (argInfo a) (Abs (unArg a) v)
+-- | @mkLam dom v = teleLam (telFromList [dom] v@
+mkLam :: Dom (ArgName, Type) -> Term -> Term
+mkLam (Dom info (x, a)) v = Lam info (Abs x v)
 
 telePi' :: (Abs Type -> Abs Type) -> Telescope -> Type -> Type
 telePi' reAbs = telePi where

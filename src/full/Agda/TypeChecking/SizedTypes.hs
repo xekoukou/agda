@@ -627,7 +627,7 @@ oldSolver metas cs = do
                 term (W.SizeVar j n) | j < ar = plus (var $ ar - j - 1) n
                 term _                        = __IMPOSSIBLE__
 
-                tel = replicate ar $ defaultArg "s"
+                tel = replicate ar $ (stringToArgName "s",) <$> dummyDom
                 -- convert size expression to term
                 v = term e
 

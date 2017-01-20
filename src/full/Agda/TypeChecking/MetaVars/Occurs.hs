@@ -17,6 +17,7 @@
 module Agda.TypeChecking.MetaVars.Occurs where
 
 import Control.Applicative
+import Control.Arrow (first)
 import Control.Monad
 import Control.Monad.Reader
 
@@ -679,16 +680,17 @@ killArgs kills m = do
       -- Andreas 2011-04-26, we allow pruning in MetaV and MetaS
       let a = jMetaType $ mvJudgement mv
       TelV tel b <- telView' <$> instantiateFull a
-      let args         = zip (telToList tel) (kills ++ repeat False)
-          (kills', a') = killedType args b
+      let killTel0      = zip (telToList tel) (kills ++ repeat False)
+          (killTel, a') = killedType killTel0 b
+          kills'        = map snd killTel
       dbg kills' a a'
       -- If there is any prunable argument, perform the pruning
-      if not (any unArg kills') then return PrunedNothing else do
-        performKill kills' m a'
+      if not (or kills') then return PrunedNothing else do
+        performKill killTel m a'
         -- Only successful if all occurrences were killed
         -- Andreas, 2011-05-09 more precisely, check that at least
         -- the in 'kills' prescribed kills were carried out
-        return $ if (and $ zipWith implies kills $ map unArg kills')
+        return $ if (and $ zipWith implies kills kills')
                    then PrunedEverything
                    else PrunedSomething
   where
@@ -707,16 +709,18 @@ killArgs kills m = do
           ]
         ]
 
+type KillTel = [(Dom (ArgName, Type), Bool)]
+
 -- | @killedType [((x1,a1),k1)..((xn,an),kn)] b = ([k'1..k'n],t')@
 --   (ignoring @Dom@).  Let @t' = (xs:as) -> b@.
 --   Invariant: @k'i == True@ iff @ki == True@ and pruning the @i@th argument from
 --   type @b@ is possible without creating unbound variables.
 --   @t'@ is type @t@ after pruning all @k'i==True@.
-killedType :: [(Dom (ArgName, Type), Bool)] -> Type -> ([Arg Bool], Type)
+killedType :: KillTel -> Type -> (KillTel, Type)
 killedType [] b = ([], b)
-killedType ((arg@(Dom info _), kill) : kills) b
-  | dontKill  = (Arg info False : args, mkPi arg b')
-  | otherwise = (Arg info True  : args, strengthen __IMPOSSIBLE__ b')
+killedType ((dom, kill) : kills) b
+  | dontKill  = ((dom, False) : args, mkPi dom b')
+  | otherwise = ((dom, True ) : args, strengthen __IMPOSSIBLE__ b')
   where
     (args, b') = killedType kills b
     dontKill = not kill || 0 `freeIn` b'
@@ -724,7 +728,7 @@ killedType ((arg@(Dom info _), kill) : kills) b
 -- | Instantiate a meta variable with a new one that only takes
 --   the arguments which are not pruneable.
 performKill
-  :: [Arg Bool]    -- ^ Arguments to old meta var in left to right order
+  :: KillTel       -- ^ Arguments to old meta var in left to right order
                    --   with @Bool@ indicating whether they can be pruned.
   -> MetaId        -- ^ The old meta var to receive pruning.
   -> Type          -- ^ The pruned type of the new meta var.
@@ -738,7 +742,7 @@ performKill kills m a = do
   -- which are not pruned in left to right order
   -- (de Bruijn level order).
   let perm = Perm n
-             [ i | (i, Arg _ False) <- zip [0..] kills ]
+             [ i | (i, (_, False)) <- zip [0..] kills ]
   m' <- newMeta (mvInfo mv) (mvPriority mv) perm
                 (HasType __IMPOSSIBLE__ a)
   -- Andreas, 2010-10-15 eta expand new meta variable if necessary
@@ -746,11 +750,11 @@ performKill kills m a = do
   let -- Arguments to new meta (de Bruijn indices)
       -- in left to right order.
       vars = [ Arg info (var i)
-             | (i, Arg info False) <- zip (downFrom n) kills ]
+             | (i, (Dom info _, False)) <- zip (downFrom n) kills ]
       u       = MetaV m' $ map Apply vars
       -- Arguments to the old meta (just arg infos and name hints)
       -- in left to right order.
-      tel     = map ("v" <$) kills
+      tel     = map fst kills
   dbg m' u
   assignTerm m tel u  -- m tel := u
   where
@@ -758,7 +762,7 @@ performKill kills m a = do
       [ text "actual killing"
       , nest 2 $ vcat
         [ text "new meta:" <+> pretty m'
-        , text "kills   :" <+> text (show kills)
+        , text "kills   :" <+> text (show $ map (first domInfo) kills)
         , text "inst    :" <+> pretty m <+> text ":=" <+> prettyTCM u
         ]
       ]

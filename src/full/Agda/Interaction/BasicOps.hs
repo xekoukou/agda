@@ -113,20 +113,20 @@ giveExpr mii mi e = do
         v <- checkExpr e t'
         case mvInstantiation mv of
 
-          InstV xs v' -> unlessM ((Irrelevant ==) <$> asks envRelevance) $ do
+          InstV tel v' -> unlessM ((Irrelevant ==) <$> asks envRelevance) $ do
             reportSDoc "interaction.give" 20 $ TP.sep
               [ TP.text "meta was already set to value v' = " TP.<+> prettyTCM v'
-                TP.<+> TP.text " with free variables " TP.<+> return (fsep $ map pretty xs)
+                TP.<+> TP.text " with free variables " TP.<+> return (fsep $ map pretty $ telToArgs tel)
               , TP.text "now comparing it to given value v = " TP.<+> prettyTCM v
               , TP.text "in context " TP.<+> inTopContext (prettyTCM ctx)
               ]
             -- The number of free variables should be at least the size of the context
             -- (Ideally, if we implemented contextual type theory, it should be the same.)
-            when (length xs < size ctx) __IMPOSSIBLE__
+            when (length tel < size ctx) __IMPOSSIBLE__
             -- if there are more free variables than the context has
-            -- we need to abstract over the additional ones (xs2)
-            let (_xs1, xs2) = splitAt (size ctx) xs
-            v' <- return $ foldr mkLam v' xs2
+            -- we need to abstract over the additional ones (tel2)
+            let (_tel1, tel2) = splitAt (size ctx) tel
+            v' <- return $ foldr mkLam v' tel2
             reportSDoc "interaction.give" 20 $ TP.sep
               [ TP.text "in meta context, v' = " TP.<+> prettyTCM v'
               ]
