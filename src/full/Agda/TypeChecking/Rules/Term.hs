@@ -158,6 +158,7 @@ isType_ e =
       (vs, rest) <- splitAt n <$> getContextArgs
       reportSDoc "tc.ip" 20 $ vcat
         [ text "  s0   = " <+> prettyTCM s0
+        , text $ "  n    =  " ++ show n
         , text "  vs   = " <+> prettyTCM vs
         , text "  rest = " <+> prettyTCM rest
         ]
@@ -165,6 +166,9 @@ isType_ e =
       -- If not we revert to the old buggy behavior of #707 (see test/Succeed/Issue2257b).
       if (length vs /= n) then fallback else do
       s1  <- piApplyM s0 vs
+      reportSDoc "tc.ip" 20 $ vcat
+        [ text "  s1   = " <+> prettyTCM s1
+        ]
       case ignoreSharing $ unEl s1 of
         Sort s -> return $ El s $ MetaV x $ map Apply vs
         _ -> __IMPOSSIBLE__

@@ -366,6 +366,14 @@ piApply1 t v = do
   (_, b) <- mustBePi t
   return $ absApp b v
 
+-- | Given @h args@ where @h : t@, compute the types of the arguments.
+--   (This is basically a telescope instantiation.)
+argTypes :: Type -> Args -> TCM [Dom Type]
+argTypes t []           = return []
+argTypes t (arg : args) = do
+  (dom, b) <- mustBePi t
+  (dom:) <$> argTypes (absApp b $ unArg arg) args
+
 ---------------------------------------------------------------------------
 -- * Instance definitions
 ---------------------------------------------------------------------------

@@ -102,3 +102,7 @@ etaOnce v = case v of
               etaContractRecord r c ci args)
           (return v)
   v -> return v
+
+-- Note: there is also a type-aware eta-contraction
+-- that respects singleton types.
+-- See Agda.TypeChecking.Records

@@ -6,6 +6,7 @@ module Agda.TypeChecking.Records where
 -- import Control.Applicative
 import Control.Monad
 
+import Data.Either
 import Data.Function
 import Data.List
 import Data.Maybe
@@ -20,6 +21,10 @@ import Agda.Syntax.Internal as I
 import Agda.Syntax.Position
 
 import Agda.TypeChecking.Monad
+import {-# SOURCE #-} Agda.TypeChecking.CheckInternal
+import Agda.TypeChecking.Datatypes
+import Agda.TypeChecking.EtaContract
+import Agda.TypeChecking.Free
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Reduce
@@ -564,14 +569,17 @@ etaExpandAtRecordType t u = do
 --   We can eta contract if all fields @f = ...@ are irrelevant
 --   or all fields @f@ are the projection @f v@ of the same value @v@,
 --   but we need at least one relevant field to find the value @v@.
---
---   TODO: this can be moved out of TCM (but only if ConHead
---   stores also the Arg-decoration of the record fields.
+
 {-# SPECIALIZE etaContractRecord :: QName -> ConHead -> ConInfo -> Args -> TCM Term #-}
 {-# SPECIALIZE etaContractRecord :: QName -> ConHead -> ConInfo -> Args -> ReduceM Term #-}
 etaContractRecord :: HasConstInfo m => QName -> ConHead -> ConInfo -> Args -> m Term
 etaContractRecord r c ci args = do
   Just Record{ recFields = xs } <- isRecord r
+  -- @check a ax@ takes a record field value @arg@ and a record field name @ax@
+  -- and returns
+  -- 1. @Nothing@ if the field does not fit the criteria to allow eta-contraction
+  -- 2. @Just Nothing@ if the field is irrelevant
+  -- 3. @Just (Just u)@ if the field is the expected projection, i.e., of the form @u .ax@
   let check :: Arg Term -> Arg QName -> Maybe (Maybe Term)
       check a ax = do
       -- @a@ is the constructor argument, @ax@ the corr. record field name
@@ -597,6 +605,110 @@ etaContractRecord r c ci args = do
               else fallBack
           _ -> fallBack -- just irrelevant terms
         _ -> fallBack  -- a Nothing
+
+-- | Eta-contract a fully applied record constructor module singleton types.
+--
+--   For instance, we can contract @(proj₁ v , s)@ to @v@ if @s@ is of singleton type.
+--
+--   The fields should be fully normalized and eta contracted already.
+--
+--   We can eta contract if all fields @f = ...@ are irrelevant or of singleton type
+--   or all fields @f@ are the projection @f v@ of the same value @v@,
+--   but we need at least one relevant field to find the value @v@.
+
+etaContractRecordModuloSingleton :: QName -> ConHead -> ConInfo -> Args -> Type -> TCM Term
+etaContractRecordModuloSingleton r c ci args t = do
+  Just Record{ recFields = xs } <- isRecord r
+  -- @check a ax@ takes a record field value @arg@ and a record field name @ax@
+  -- and returns
+  -- 1. @Left x@ if the field @x@does not fit the criteria to allow eta-contraction
+  -- 2. @Right Nothing@ if the field is irrelevant
+  -- 3. @Right (Just u)@ if the field is the expected projection, i.e., of the form @u .ax@
+  let check :: Arg Term -> Arg QName -> Either QName (Maybe Term)
+      check a ax = do
+      -- @a@ is the constructor argument, @ax@ the corr. record field name
+        -- skip irrelevant record fields by returning DontCare
+        case (getRelevance a, hasElims $ unArg a) of
+          (Irrelevant, _)   -> Right Nothing
+          -- if @a@ is the record field name applied to a single argument
+          -- then it passes the check
+          (_, Just (h, es@(_:_))) | Proj _o f <- last es, unArg ax == f
+                            -> Right $ Just $ h $ init es
+          _ -> Left $ unArg ax -- not a projection
+      fallBack = return (Con c ci args)
+  case compare (length args) (length xs) of
+    LT -> fallBack       -- Not fully applied
+    GT -> __IMPOSSIBLE__ -- Too many arguments. Impossible.
+    EQ -> do
+      let (fs, mvs) = partitionEithers $ zipWith check args xs
+      case catMaybes mvs of
+        (a:as) -> do
+          -- Check whether all terms we project from are the same.
+          -- TODO: is just syntactic equality sufficient!?
+          if any (a /=) as then fallBack else do
+            -- All remaining fields must be of singleton type.
+            ifM (allM fs fieldHasSingletonType) {-then-} (return a) {-else-} fallBack
+        _ -> fallBack -- just irrelevant terms
+  where
+  -- Check whether field @q@ of record type @t@ is a singleton type.
+  fieldHasSingletonType :: QName -> TCM Bool
+  fieldHasSingletonType q = do
+    caseMaybeM (projectTyped (Con c ci args) t ProjSystem q) (return False) $ \ (_, _, tf) -> do
+      fromRight (const False) <$> isSingletonTypeModuloRelevance tf
+
+
+-- | Eta-contraction modulo singleton types (see issue #2556).
+--   This will e.g. contract @λ y → x (λ z → record{})@ to @x@,
+--   which 'etaOnce' cannot do as it does not live in the 'TCM'.
+--
+--   Since checking for singleton types has some cost, we only use
+--   this function where it matters (e.g. in the Miller unifier).
+
+etaOnceModuloSingleton :: Term -> Type -> TCM Term
+etaOnceModuloSingleton v0 t = do
+  let dontContract = return v0
+  case v0 of
+    Shared{} -> updateSharedTerm etaOnce v0
+    Lam i (Abs _ b) -> do  -- NoAbs can't be eta'd
+        case binAppView b of
+          App u (Arg info v)
+            | getHiding i == getHiding info && not (freeIn 0 u) -> do
+              let contract = return $ strengthen __IMPOSSIBLE__ u
+              -- If --type-in-type, then all levels are equal.
+              tyty <- typeInType
+              if isVar0 tyty v then contract else do
+                -- If the domain of the lambda is a singleton type, we can contract.
+                ifNotPiType t (\ _ -> dontContract) $ \ dom _ -> do
+                  ifM (fromRight (const False) <$>
+                       isSingletonTypeModuloRelevance (unDom dom))
+                    {-then-} contract
+                    {-else-} dontContract
+          _ -> dontContract
+      where
+        isVar0 tyty (Shared p) = isVar0 tyty (derefPtr p)
+        isVar0 _    (Var 0 []) = True
+        isVar0 True Level{}    = True
+        isVar0 tyty (Level (Max [Plus 0 l])) = case l of
+          NeutralLevel _ v -> isVar0 tyty v
+          UnreducedLevel v -> isVar0 tyty v
+          BlockedLevel{}   -> False
+          MetaLevel{}      -> False
+        isVar0 _ _ = False
+
+    Con c ci args -> ignoreAbstractMode $ do
+        r <- getConstructorData $ conName c -- fails in ConcreteMode if c is abstract
+        ifM (isEtaRecord r)
+            (etaContractRecord r c ci args)
+            dontContract
+    _ -> dontContract
+
+-- | Contracts all eta-redexes it sees without reducing.
+--   Takes singleton types into account.
+etaContractModuloSingleton :: Term -> Type -> TCM Term
+etaContractModuloSingleton v t = checkInternal' action v t
+  where
+  action = defaultAction { postAction = flip etaOnceModuloSingleton }
+
 
 -- | Is the type a hereditarily singleton record type? May return a
 -- blocking metavariable.

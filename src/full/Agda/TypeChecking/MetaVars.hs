@@ -44,6 +44,7 @@ import Agda.Utils.Except
   , runExceptT
   )
 
+import Agda.Utils.Functor
 import Agda.Utils.Lens
 import Agda.Utils.List
 import Agda.Utils.Maybe
@@ -620,7 +621,8 @@ assign dir x args v = do
     -- args <- etaContract =<< normalise args
 
     -- Also, try to expand away projected vars in meta args.
-    expandProjectedVars args v $ \ args v -> do
+    doms <- argTypes t args
+    expandProjectedVars (map unDom doms) args v $ \ args v -> do
 
       -- If we had the type here we could save the work we put
       -- into expanding projected variables.
@@ -947,13 +949,20 @@ subtypingForSizeLt dir   x mvar t args v cont = do
         _ -> fallback
 
 -- | Eta-expand bound variables like @z@ in @X (fst z)@.
-expandProjectedVars :: (Normalise a, TermLike a, Show a, PrettyTCM a, NoProjectedVar a,
-                        Subst Term a, PrettyTCM b, Subst Term b) =>
-  a -> b -> (a -> b -> TCM c) -> TCM c
-expandProjectedVars args v ret = loop (args, v) where
-  loop (args, v) = do
+--
+--   Precondition: @length types == length args@.
+expandProjectedVars :: forall b c. (PrettyTCM b, Subst Term b) =>
+  [Type] -> Args -> b -> (Args -> b -> TCM c) -> TCM c
+expandProjectedVars types args v ret = do
+  loop (args, types, v)
+  where
+  loop :: (Args, [Type], b) -> TCM c
+  loop (args, types, v) = do
     reportSDoc "tc.meta.assign.proj" 45 $ text "meta args: " <+> prettyTCM args
-    args <- etaContract =<< normalise args
+    reportSDoc "tc.meta.assign.proj" 45 $ text "meta arg types: " <+> prettyTCM types
+    args1 <- normalise args
+    vs    <- mapM (uncurry etaContractModuloSingleton) $ zip (map unArg args1) types
+    let args = zipWith ($>) args1 vs  -- restore ArgInfo
     reportSDoc "tc.meta.assign.proj" 45 $ text "norm args: " <+> prettyTCM args
     reportSDoc "tc.meta.assign.proj" 85 $ text "norm args: " <+> text (show args)
     let done = ret args v
@@ -962,7 +971,7 @@ expandProjectedVars args v ret = loop (args, v) where
         reportSDoc "tc.meta.assign.proj" 40 $
           text "no projected var found in args: " <+> prettyTCM args
         done
-      Left (ProjVarExc i _) -> etaExpandProjectedVar i (args, v) done loop
+      Left (ProjVarExc i _) -> etaExpandProjectedVar i (args, types, v) done loop
 
 -- | Eta-expand a de Bruijn index of record type in context and passed term(s).
 etaExpandProjectedVar :: (PrettyTCM a, Subst Term a) => Int -> a -> TCM c -> (a -> TCM c) -> TCM c

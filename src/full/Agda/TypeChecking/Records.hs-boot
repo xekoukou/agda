@@ -12,3 +12,4 @@ getRecordFieldNames :: QName -> TCM [Arg C.Name]
 etaContractRecord :: HasConstInfo m => QName -> ConHead -> ConInfo -> Args -> m Term
 isGeneratedRecordConstructor :: QName -> TCM Bool
 isRecordConstructor :: HasConstInfo m => QName -> m (Maybe (QName, Defn))
+isSingletonTypeModuloRelevance :: (MonadTCM tcm) => Type -> tcm (Either MetaId Bool)

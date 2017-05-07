@@ -1,4 +1,5 @@
 -- 2013-06-15 Andreas, issue reported by Stevan Andjelkovic
+
 module Issue854 where
 
 infixr 1 _⊎_
