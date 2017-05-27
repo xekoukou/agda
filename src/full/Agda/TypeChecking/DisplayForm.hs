@@ -195,8 +195,11 @@ instance SubstWithOrigin (Arg Term) where
       -- otherwise: fall back to ordinary substitution
       _ -> Arg ai $ applySubst rho v
     where
-      replaceOrigin _ UserWritten = UserWritten
-      replaceOrigin o _           = o
+      -- We preserve 'UserWritten' as much as possible.
+      -- If both are 'UserWritten', the newer one is dominant.
+      replaceOrigin o@UserWritten{} _ = o
+      replaceOrigin _ o@UserWritten{} = o
+      replaceOrigin o _               = o
 
 instance SubstWithOrigin Term where
   substWithOrigin rho ots v =

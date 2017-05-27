@@ -1186,7 +1186,7 @@ Abstract : 'abstract' Declarations  { Abstract (fuseRange $1 $2) $2 }
 
 -- Private can only appear on the top-level (or rather the module level).
 Private :: { Declaration }
-Private : 'private' Declarations        { Private (fuseRange $1 $2) UserWritten $2 }
+Private : 'private' Declarations        { Private (fuseRange $1 $2) userWritten $2 }
 
 
 -- Instance declarations.
@@ -1938,8 +1938,8 @@ exprToPattern e = do
         Underscore r _          -> return $ WildP r
         Absurd r                -> return $ AbsurdP r
         As r x e                -> AsP r x <$> exprToPattern e
-        Dot r (HiddenArg _ e)   -> return $ HiddenP r $ fmap (DotP r UserWritten) e
-        Dot r e                 -> return $ DotP r UserWritten e
+        Dot r (HiddenArg _ e)   -> return $ HiddenP r $ fmap (DotP r userWritten) e
+        Dot r e                 -> return $ DotP r userWritten e
         Lit l                   -> return $ LitP l
         HiddenArg r e           -> HiddenP r <$> T.mapM exprToPattern e
         InstanceArg r e         -> InstanceP r <$> T.mapM exprToPattern e

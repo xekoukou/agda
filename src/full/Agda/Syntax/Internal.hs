@@ -145,7 +145,7 @@ type Elims = [Elim]  -- ^ eliminations ordered left-to-right.
 --   'Proj's are always assumed to be 'UserWritten', since they have no 'ArgInfo'.
 instance LensOrigin (Elim' a) where
   getOrigin (Apply a)   = getOrigin a
-  getOrigin Proj{}      = UserWritten
+  getOrigin Proj{}      = userWritten
   mapOrigin f (Apply a) = Apply $ mapOrigin f a
   mapOrigin f e@Proj{}  = e
 

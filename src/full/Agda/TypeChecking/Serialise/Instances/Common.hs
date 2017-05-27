@@ -420,11 +420,11 @@ instance EmbPrj Relevance where
   value _ = malformed
 
 instance EmbPrj Origin where
-  icod_ UserWritten = return 0
+  icod_ UserWritten{} = return 0  -- We do not serialize 'FromEllipsis' etc.
   icod_ Inserted    = return 1
   icod_ Reflected   = return 2
 
-  value 0 = return UserWritten
+  value 0 = return userWritten
   value 1 = return Inserted
   value 2 = return Reflected
   value _ = malformed

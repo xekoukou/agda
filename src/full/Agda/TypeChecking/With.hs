@@ -360,7 +360,7 @@ stripWithClausePatterns cxtNames parent f t delta qs npars perm ps = do
       case namedArg p of
         A.DotP info o e -> case unScope e of
           A.Underscore{} -> return ()
-          e | o == UserWritten -> typeError $ GenericError $
+          e | isUserWritten o -> typeError $ GenericError $
             "This inaccessible pattern is never checked, so only _ allowed here"
           _ -> return ()
         _ -> return ()

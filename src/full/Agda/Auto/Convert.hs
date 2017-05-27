@@ -448,7 +448,7 @@ icnvh h = Cm.setHiding h' $
     -- Visible arguments are made UserWritten,
     -- otherwise they might not be printed in patterns.
     (h', o) = case h of
-        NotHidden -> (Cm.NotHidden, Cm.UserWritten)
+        NotHidden -> (Cm.NotHidden, Cm.userWritten)
         Instance  -> (Cm.Instance , Cm.Inserted   )
         Hidden    -> (Cm.Hidden   , Cm.Inserted   )
 

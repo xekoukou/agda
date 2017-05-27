@@ -1270,7 +1270,9 @@ niceDeclarations ds = do
     privateBlock r o ds = do
       let (ds', anyChange) = runChange $ mkPrivate o ds
       if anyChange then return ds' else
-        if o == UserWritten then throwError $ UselessPrivate r else return ds -- no change!
+        case o of
+          UserWritten{} -> throwError $ UselessPrivate r
+          _ -> return ds -- no change!
 
     instanceBlock _ [] = return []
     instanceBlock r ds = do

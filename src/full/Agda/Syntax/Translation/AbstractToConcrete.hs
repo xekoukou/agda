@@ -242,8 +242,8 @@ withAbstractPrivate i m =
       . addInstanceB (defInstance i == InstanceDef)
       <$> m
     where
-        priv (PrivateAccess UserWritten)
-                         ds = [ C.Private  (getRange ds) UserWritten ds ]
+        priv (PrivateAccess UserWritten{})
+                         ds = [ C.Private  (getRange ds) userWritten ds ]
         priv _           ds = ds
         abst AbstractDef ds = [ C.Abstract (getRange ds) ds ]
         abst ConcreteDef ds = ds
@@ -923,7 +923,7 @@ instance ToConcrete A.Pattern C.Pattern where
 
       A.ProjP _ _ (AmbQ []) -> __IMPOSSIBLE__
       A.ProjP i ProjPrefix xs@(AmbQ (x:_)) -> C.IdentP <$> toConcrete x
-      A.ProjP i _ xs@(AmbQ (x:_)) -> C.DotP (getRange x) UserWritten . C.Ident <$> toConcrete x
+      A.ProjP i _ xs@(AmbQ (x:_)) -> C.DotP (getRange x) userWritten . C.Ident <$> toConcrete x
 
       A.DefP i (AmbQ []) _ -> __IMPOSSIBLE__
       A.DefP i xs@(AmbQ (x:_)) args -> tryOp x (A.DefP i xs)  args

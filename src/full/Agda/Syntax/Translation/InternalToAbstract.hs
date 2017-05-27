@@ -704,7 +704,7 @@ stripImplicits (ps, wps) = do          -- v if show-implicit we don't need the n
 
           canStrip a = and
             [ notVisible a
-            , getOrigin a /= UserWritten
+            , not $ isUserWritten a
             , varOrDot (namedArg a)
             ]
 

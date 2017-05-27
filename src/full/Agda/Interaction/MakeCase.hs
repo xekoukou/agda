@@ -292,7 +292,7 @@ makePatternVarsVisible is sc@SClause{ scPats = ps } =
       -- We could introduce extra consistency checks, like
       -- if visible ai then __IMPOSSIBLE__ else
       -- or passing the parsed name along and comparing it with @x@
-      setOrigin UserWritten nx
+      mapOrigin mkUserWritten nx
     | otherwise = nx
 
 -- | Make clause with no rhs (because of absurd match).

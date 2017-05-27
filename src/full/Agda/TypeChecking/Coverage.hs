@@ -477,7 +477,7 @@ fixTarget sc@SClause{ scTel = sctel, scPats = ps, scSubst = sigma, scModuleParam
 -- Otherwise, they will be printed as _.
 hiddenInserted :: ArgInfo -> ArgInfo
 hiddenInserted ai
-  | visible ai = setOrigin UserWritten ai
+  | visible ai = setOrigin userWritten ai
   | otherwise  = setOrigin Inserted ai
 
 -- | @computeNeighbourhood delta1 delta2 d pars ixs hix tel ps mpsub con@
@@ -532,7 +532,7 @@ computeNeighbourhood delta1 n delta2 d pars ixs hix tel ps mpsub c = do
   -- Andreas, 2017-01-21, issue #2424
   -- When generating new variable names for the split,
   -- respect the user written names!
-  let maybeUserWritten arg | getOrigin arg == UserWritten = Just $ unArg arg
+  let maybeUserWritten arg | isUserWritten arg = Just $ unArg arg
                            | otherwise = Nothing
       (userNames0 :: [ArgName]) = mapMaybe maybeUserWritten $ teleArgNames tel
       (userNames :: [PatVarName]) = map dbPatVarName $ lefts $
