@@ -44,6 +44,7 @@ import Agda.Syntax.Concrete.Name as C
 import qualified Agda.Syntax.Concrete as C
 import qualified Agda.Syntax.Abstract as A
 import Agda.Syntax.Position as P
+import Agda.Syntax.Info (LHSInfo(..))
 import Agda.Syntax.Fixity
 import Agda.Syntax.Notation
 import Agda.Syntax.Literal
@@ -448,6 +449,11 @@ instance EmbPrj ProjOrigin where
   value 1 = return ProjPostfix
   value 2 = return ProjSystem
   value _ = malformed
+
+instance EmbPrj LHSInfo where
+  icod_ (LHSInfo a b) = icodeN' LHSInfo a b
+
+  value = valueN LHSInfo
 
 instance EmbPrj Agda.Syntax.Literal.Literal where
   icod_ (LitNat    a b)   = icodeN' LitNat a b

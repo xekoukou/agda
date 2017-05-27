@@ -1,10 +1,13 @@
 {-# LANGUAGE GADTs                     #-}
+{-# LANGUAGE ImpredicativeTypes        #-}
 {-# LANGUAGE NoMonoLocalBinds          #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
 module Agda.Syntax.Abstract.Pattern where
 
+import Data.Foldable
 import Data.Functor
+import Data.Monoid
 
 import Agda.Syntax.Common
 import Agda.Syntax.Concrete (FieldAssignment', exprFieldA)
@@ -19,7 +22,7 @@ class MapNamedArgPattern a  where
      :: (Functor f, MapNamedArgPattern a', a ~ f a') => (NAP -> NAP) -> a -> a
   mapNamedArgPattern = fmap . mapNamedArgPattern
 
-instance MapNamedArgPattern NAP where
+instance {-# OVERLAPPING #-} MapNamedArgPattern NAP where
   mapNamedArgPattern f p =
     case namedArg p of
       -- no sub patterns:
@@ -39,8 +42,56 @@ instance MapNamedArgPattern NAP where
       -- AsP: we hand the NamedArg info to the subpattern
       AsP i x p0         -> f $ updateNamedArg (AsP i x) $ mapNamedArgPattern f $ setNamedArg p p0
 
+instance MapNamedArgPattern LHSCore where
+  mapNamedArgPattern f lhscore =
+    case lhscore of
+      LHSHead q ps      -> LHSHead q $ mapNamedArgPattern f ps
+      LHSProj q core ps -> LHSProj q (mapNamedArgPattern f core) $ mapNamedArgPattern f ps
+
+instance MapNamedArgPattern a => MapNamedArgPattern (Named x a) where
+instance MapNamedArgPattern a => MapNamedArgPattern (Arg a) where
 instance MapNamedArgPattern a => MapNamedArgPattern [a] where
-
 instance MapNamedArgPattern a => MapNamedArgPattern (FieldAssignment' a) where
-
 instance MapNamedArgPattern a => MapNamedArgPattern (Maybe a) where
+
+
+-- | Collect something from @NamedArg a@.
+
+class FoldNamedArg b where
+  foldNamedArg :: Monoid m => (forall a. NamedArg a -> m) -> b -> m
+
+  default foldNamedArg
+    :: (Monoid m, Foldable f, FoldNamedArg b', b ~ f b')
+    => (forall a. NamedArg a -> m) -> b -> m
+  foldNamedArg = foldMap . foldNamedArg
+
+instance FoldNamedArg b => FoldNamedArg [b]                  where
+instance FoldNamedArg b => FoldNamedArg (FieldAssignment' b) where
+instance FoldNamedArg b => FoldNamedArg (Maybe b)            where
+
+instance FoldNamedArg a => FoldNamedArg (NamedArg a) where
+  foldNamedArg f x = f x `mappend` foldNamedArg f (namedArg x)
+
+instance FoldNamedArg Pattern where
+  foldNamedArg f p =
+    case p of
+      -- no sub patterns:
+      VarP{}    -> mempty
+      WildP{}   -> mempty
+      DotP{}    -> mempty
+      LitP{}    -> mempty
+      AbsurdP{} -> mempty
+      ProjP{}   -> mempty
+      -- list of NamedArg subpatterns:
+      ConP i qs ps       -> foldNamedArg f ps
+      DefP i qs ps       -> foldNamedArg f ps
+      PatternSynP i x ps -> foldNamedArg f ps
+      -- Pattern subpattern(s):
+      RecP i fs          -> foldNamedArg f fs
+      AsP i x p0         -> foldNamedArg f p0
+
+instance FoldNamedArg LHSCore where
+  foldNamedArg f lhs =
+    case lhs of
+      LHSHead _ ps -> foldNamedArg f ps
+      LHSProj _ p ps -> foldNamedArg f p `mappend` foldNamedArg f ps

@@ -181,14 +181,24 @@ instance KillRange MutualInfo where
     Left hand side information
  --------------------------------------------------------------------------}
 
-newtype LHSInfo = LHSRange Range
-  deriving (Typeable, Data, Show, Eq, Null)
+data LHSInfo = LHSInfo
+  { lhsRange  :: Range
+  , lhsOrigin :: Origin  -- ^ Does this 'LHS' come from an ellipsis?
+  }
+  deriving (Typeable, Data, Show, Eq)
+
+instance Null LHSInfo where
+  empty = LHSInfo empty Inserted
 
 instance HasRange LHSInfo where
-  getRange (LHSRange r) = r
+  getRange (LHSInfo r _) = r
 
 instance KillRange LHSInfo where
-  killRange (LHSRange r) = LHSRange noRange
+  killRange (LHSInfo r o) = LHSInfo noRange o
+
+instance LensOrigin LHSInfo where
+  getOrigin = lhsOrigin
+  mapOrigin f (LHSInfo r o) = LHSInfo r (f o)
 
 {--------------------------------------------------------------------------
     Pattern information

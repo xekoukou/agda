@@ -91,6 +91,10 @@ instance Pretty (ThingWithFixity Name) where
 instance Pretty a => Pretty (WithHiding a) where
   pretty w = prettyHiding w id $ pretty $ dget w
 
+-- Origin does not show up in pretty-printing.
+instance Pretty a => Pretty (WithOrigin a) where
+  pretty (WithOrigin _ a) = pretty a
+
 instance Pretty Relevance where
   pretty Forced{}   = empty
   pretty Relevant   = empty

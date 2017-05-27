@@ -13,6 +13,7 @@ import Agda.Interaction.Options
 
 import qualified Agda.Syntax.Abstract as A
 import Agda.Syntax.Common
+import Agda.Syntax.Info (LHSInfo(..))
 import Agda.Syntax.Internal
 import Agda.Syntax.Internal.Pattern
 import Agda.Syntax.Position
@@ -399,7 +400,7 @@ checkRecordProjections m r hasNamedCon con tel ftel fs = do
                      [ Arg info $ unnamed $ varP "x" | Dom info _ <- telToList ftel ]
             body   = Just $ bodyMod $ var (size ftel2)
             cltel  = ftel
-            clause = Clause { clauseLHSRange  = getRange info
+            clause = Clause { clauseLHSInfo   = LHSInfo (getRange info) Inserted
                             , clauseFullRange = getRange info
                             , clauseTel       = killRange cltel
                             , namedClausePats = [Named Nothing <$> numberPatVars __IMPOSSIBLE__ (idP $ size ftel) conp]

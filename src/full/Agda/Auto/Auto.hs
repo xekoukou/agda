@@ -385,7 +385,8 @@ auto ii rng argstr = do
                  -- Normalise the dot patterns
                  ps <- addContext tel $ normalise ps
                  body <- etaContract body
-                 liftM modifyAbstractClause $ inTopContext $ reify $ AN.QNamed def $ I.Clause noRange noRange tel ps body t catchall
+                 liftM modifyAbstractClause $ inTopContext $ reify $ AN.QNamed def $
+                   I.Clause empty noRange tel ps body t catchall
               moduleTel <- lookupSection (AN.qnameModule def)
               pcs <- withInteractionId ii $ inTopContext $ addContext moduleTel $ mapM prettyA cls''
               ticks <- liftIO $ readIORef ticks
@@ -504,4 +505,3 @@ insuffsols  = genericNotEnough "solution"
 
 insuffcands :: Int -> String
 insuffcands = genericNotEnough "candidate"
-

@@ -695,6 +695,14 @@ updateNamedArg = fmap . fmap
 setNamedArg :: NamedArg a -> b -> NamedArg b
 setNamedArg a b = (b <$) <$> a
 
+-- | Keep only 'Origin' from 'NamedArg'.
+originFromNamedArg :: NamedArg a -> WithOrigin a
+originFromNamedArg p = WithOrigin (getOrigin p) $ namedArg p
+
+-- | Construct a 'defaultNamedArg' with the supplied origin.
+originToNamedArg :: WithOrigin a -> NamedArg a
+originToNamedArg (WithOrigin o p) = setOrigin o $ defaultNamedArg p
+
 ---------------------------------------------------------------------------
 -- * Range decoration.
 ---------------------------------------------------------------------------

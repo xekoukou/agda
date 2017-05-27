@@ -156,7 +156,7 @@ checkAlias t' ai delayed i name e mc = atClause name 0 (A.RHS e mc) $ do
                    $ set funMacro (Info.defMacro i == MacroDef) $
                      emptyFunction
                       { funClauses = [ Clause  -- trivial clause @name = v@
-                          { clauseLHSRange  = getRange i
+                          { clauseLHSInfo   = LHSInfo (getRange i) userWritten
                           , clauseFullRange = getRange i
                           , clauseTel       = EmptyTel
                           , namedClausePats = []
@@ -338,7 +338,7 @@ useTerPragma def = return def
 
 
 -- | Insert some patterns in the in with-clauses LHS of the given RHS
-insertPatterns :: [A.Pattern] -> A.RHS -> A.RHS
+insertPatterns :: [WithOrigin A.Pattern] -> A.RHS -> A.RHS
 insertPatterns pats (A.WithRHS aux es cs) = A.WithRHS aux es (map insertToClause cs)
     where insertToClause (A.Clause (A.LHS i lhscore ps) dots rhs ds catchall)
               = A.Clause (A.LHS i lhscore (pats ++ ps)) dots (insertPatterns pats rhs) ds catchall
@@ -377,7 +377,7 @@ checkClause
 checkClause t withSub c@(A.Clause (A.SpineLHS i x aps withPats) namedDots rhs0 wh catchall) = do
     reportSDoc "tc.lhs.top" 30 $ text "Checking clause" $$ prettyA c
     unless (null withPats) $
-      typeError $ UnexpectedWithPatterns withPats
+      typeError $ UnexpectedWithPatterns $ map woThing withPats
     traceCall (CheckClause t c) $ do
       aps <- expandPatternSynonyms aps
       cxtNames <- reverse . map (fst . unDom) <$> getContext
@@ -443,7 +443,7 @@ checkClause t withSub c@(A.Clause (A.SpineLHS i x aps withPats) namedDots rhs0 w
               _          -> body
 
         return $
-          Clause { clauseLHSRange  = getRange i
+          Clause { clauseLHSInfo   = i
                  , clauseFullRange = getRange c
                  , clauseTel       = killRange delta
                  , namedClausePats = ps
@@ -556,12 +556,13 @@ checkRHS i x aps t lhsResult@(LHSResult _ delta ps trhs _ _asb) rhs0 = handleRHS
         let isReflexive = tryConversion $ dontAssignMetas $
              equalTerm rewriteType rewriteFrom rewriteTo
 
-        (pats, withExpr, withType) <- do
+        (pats0, withExpr, withType) <- do
           ifM isReflexive
             {-then-} (return ([ reflPat ], proof, OtherType t'))
             {-else-} (return ([ A.WildP patNoRange, reflPat ], proof, eqt))
 
-        let rhs'     = insertPatterns pats rhs
+        let pats     = map (WithOrigin Inserted) pats0
+            rhs'     = insertPatterns pats rhs
             (rhs'', outerWhere) -- the where clauses should go on the inner-most with
               | null qes  = (rhs', wh)
               | otherwise = (A.RewriteRHS qes rhs' wh, [])

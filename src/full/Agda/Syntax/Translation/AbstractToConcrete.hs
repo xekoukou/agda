@@ -46,6 +46,7 @@ import qualified Agda.Syntax.Internal as I
 import Agda.Syntax.Fixity
 import Agda.Syntax.Concrete as C
 import Agda.Syntax.Abstract as A
+import Agda.Syntax.Abstract.Pattern
 import Agda.Syntax.Abstract.Views as AV
 import Agda.Syntax.Scope.Base
 
@@ -295,6 +296,10 @@ bindToConcreteHiding h =
 
 -- General instances ------------------------------------------------------
 
+instance ToConcrete a c => ToConcrete (WithOrigin a) (WithOrigin c) where
+  toConcrete = traverse toConcrete
+  bindToConcrete (WithOrigin o a) ret = bindToConcrete a $ ret . WithOrigin o
+
 instance ToConcrete a c => ToConcrete [a] [c] where
     toConcrete     = mapM toConcrete
     -- Andreas, 2017-04-11, Issue #2543
@@ -458,7 +463,7 @@ instance ToConcrete A.Expr C.Expr where
           let decl2clause (C.FunClause lhs rhs wh ca) = do
                 let p = lhsOriginalPattern lhs
                 lift $ reportSLn "extendedlambda" 50 $ "abstractToConcrete extended lambda pattern p = " ++ show p
-                p' <- removeApp p
+                p' <- traverse removeApp p
                 lift $ reportSLn "extendedlambda" 50 $ "abstractToConcrete extended lambda pattern p' = " ++ show p'
                 return (lhs{ lhsOriginalPattern = p' }, rhs, wh, ca)
               decl2clause _ = __IMPOSSIBLE__
@@ -593,14 +598,14 @@ instance ToConcrete LetBinding [C.Declaration] where
         do (t,(e, [], [], [])) <- toConcrete (t, A.RHS e Nothing)
            ret $ addInstanceB (getHiding info == Instance) $
                [ C.TypeSig info x t
-               , C.FunClause (C.LHS (C.IdentP $ C.QName x) [] [] [])
+               , C.FunClause (C.LHS (WithOrigin userWritten $ C.IdentP $ C.QName x) [] [] [])
                              e C.NoWhere False
                ]
     -- TODO: bind variables
     bindToConcrete (LetPatBind i p e) ret = do
         p <- toConcrete p
         e <- toConcrete e
-        ret [ C.FunClause (C.LHS p [] [] []) (C.RHS e) NoWhere False ]
+        ret [ C.FunClause (C.LHS (WithOrigin userWritten p) [] [] []) (C.RHS e) NoWhere False ]
     bindToConcrete (LetApply i x modapp _ _) ret = do
       x' <- unqualify <$> toConcrete x
       modapp <- toConcrete modapp
@@ -694,16 +699,14 @@ instance ToConcrete (Constr A.Constructor) C.Declaration where
 
 instance ToConcrete a C.LHS => ToConcrete (A.Clause' a) [C.Declaration] where
   toConcrete (A.Clause lhs _ rhs wh catchall) =
-      bindToConcrete lhs $ \lhs ->
+    bindToConcrete lhs $ \ lhs -> do
+      bindToConcrete (AsWhereDecls wh) $ \ wh' -> do
+        (rhs', eqs, with, wcs) <- toConcreteTop rhs
         case lhs of
           C.LHS p wps _ _ -> do
-            bindToConcrete (AsWhereDecls wh)  $ \wh' -> do
-                (rhs', eqs, with, wcs) <- toConcreteTop rhs
-                return $ FunClause (C.LHS p wps eqs with) rhs' wh' catchall : wcs
-          C.Ellipsis {} -> __IMPOSSIBLE__
-          -- TODO: Is the case above impossible? Previously there was
-          -- no code for it, but GHC 7's completeness checker spotted
-          -- that the case was not covered.
+            return $ FunClause (C.LHS p wps eqs with) rhs' wh' catchall : wcs
+          C.Ellipsis r wps _ _ -> do
+            return $ FunClause (C.Ellipsis r wps eqs with) rhs' wh' catchall : wcs
 
 instance ToConcrete A.ModuleApplication C.ModuleApplication where
   toConcrete (A.SectionApp tel y es) = do
@@ -869,13 +872,57 @@ instance ToConcrete A.SpineLHS C.LHS where
   bindToConcrete lhs = bindToConcrete (A.spineToLhs lhs :: A.LHS)
 
 instance ToConcrete A.LHS C.LHS where
-    bindToConcrete (A.LHS i lhscore wps) ret = do
-      bindToConcreteCtx TopCtx lhscore $ \lhs ->
-        bindToConcreteCtx TopCtx wps $ \wps ->
-          ret $ C.LHS lhs wps [] []
+  bindToConcrete (A.LHS i lhscore wps) ret
+    | isEllipsis = do
+        bindToConcreteCtx TopCtx wps2 $ \ wps2 ->
+          ret $ C.Ellipsis r wps2 [] []
+    | otherwise = do
+      bindToConcreteCtx TopCtx lhscore $ \ lhs ->
+        bindToConcreteCtx TopCtx wps $ \ wps ->
+          ret $ C.LHS (wo lhs) wps [] []
+    where
+    -- We can reconstruct the ellipsis if none of the FromEllipsis patterns
+    -- has become a ModifiedEllipsis.
+    lhsCouldBeEllipsis = UserWritten FromEllipsis == getOrigin i &&
+                           FromEllipsis == collectUserOrigin lhscore
+    wpsOrigins         = for wps $ \ (WithOrigin o w) -> collectedUserOrigin $
+                           collectFromOrigin o `mappend` foldNamedArg collectFromOrigin w
+    wpsCouldBeEllipsis = not $ any (ModifiedEllipsis ==) wpsOrigins
+    isEllipsis         = lhsCouldBeEllipsis && wpsCouldBeEllipsis
+    -- We split the with patterns into those subsumed by the ellipsis and those that are not.
+    ellipsisWps        = length $ takeWhile (FromEllipsis ==) wpsOrigins
+    (wps1, wps2)       = splitAt ellipsisWps $ map woThing wps
+    r                  = fuseRange lhscore wps1
+    wo                 = WithOrigin $ lhsOrigin i
+
+-- | Collect all 'UserOrigin' values.
+
+collectUserOrigin :: FoldNamedArg b => b -> UserOrigin
+collectUserOrigin = collectedUserOrigin . foldNamedArg collectFromOrigin
+
+collectFromOrigin :: LensOrigin a => a -> CollectUserOrigin
+collectFromOrigin x = case getOrigin x of
+    UserWritten u -> CollectUserOrigin u
+    _ -> mempty
+
+newtype CollectUserOrigin = CollectUserOrigin { collectedUserOrigin :: UserOrigin }
+
+-- | Aggregate 'UserOrigin' according to maximum, where
+--   @UserOrigin > ModifiedEllipsis > FromEllipsis@.
+instance Monoid CollectUserOrigin where
+  mempty = CollectUserOrigin FromEllipsis
+  mappend (CollectUserOrigin u1) (CollectUserOrigin u2) = CollectUserOrigin $
+    case (u1, u2) of
+      (UserOrigin, _) -> UserOrigin
+      (_, UserOrigin) -> UserOrigin
+      (ModifiedEllipsis, _) -> ModifiedEllipsis
+      (_, ModifiedEllipsis) -> ModifiedEllipsis
+      (FromEllipsis, FromEllipsis) -> FromEllipsis
+
 
 instance ToConcrete A.LHSCore C.Pattern where
   bindToConcrete = bindToConcrete . lhsCoreToPattern
+
 
 appBrackets' :: [arg] -> Precedence -> Bool
 appBrackets' []    _   = False

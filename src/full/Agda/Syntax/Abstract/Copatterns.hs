@@ -346,6 +346,9 @@ instance Rename Pattern where
 instance Rename Declaration where
   rename rho d = __IMPOSSIBLE__
 
+instance Rename a => Rename (WithOrigin a) where
+  rename rho = fmap (rename rho)
+
 instance Rename a => Rename (Arg a) where
   rename rho = fmap (rename rho)
 
@@ -398,6 +401,9 @@ instance Alpha (LHSCore' e) where
 
 instance Alpha LHS where
   alpha' (LHS _ core wps) (LHS _ core' wps') = alpha' core core' >> alpha' wps wps'
+
+instance Alpha a => Alpha (WithOrigin a) where
+  alpha' a a' = alpha' (woThing a) (woThing a')
 
 instance Alpha a => Alpha (Arg a) where
   alpha' a a' = alpha' (unArg a) (unArg a')

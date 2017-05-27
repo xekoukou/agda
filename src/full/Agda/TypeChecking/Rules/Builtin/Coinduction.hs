@@ -13,6 +13,7 @@ import qualified Data.Set as Set
 
 import qualified Agda.Syntax.Abstract as A
 import Agda.Syntax.Common
+import Agda.Syntax.Info (LHSInfo(..))
 import Agda.Syntax.Internal
 import Agda.Syntax.Position
 
@@ -128,7 +129,7 @@ bindBuiltinFlat e =
         infA     = El (varSort 2) $ Def inf [ Apply $ defaultArg $ var 1 ]
         cpi      = ConPatternInfo Nothing $ Just $ defaultArg infA
     let clause   = Clause
-          { clauseLHSRange  = noRange
+          { clauseLHSInfo   = LHSInfo noRange Inserted
           , clauseFullRange = noRange
           , clauseTel       = tel
           , namedClausePats = [ argN $ Named Nothing $

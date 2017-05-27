@@ -274,10 +274,10 @@ reifyDisplayFormP lhs@(A.SpineLHS i f ps wps) =
     flattenWith (DTerm (I.Def f es)) = (f, map (fmap DTerm) es, [])
     flattenWith _ = __IMPOSSIBLE__
 
-    displayLHS :: [NamedArg A.Pattern] -> [A.Pattern] -> DisplayTerm -> TCM A.SpineLHS
+    displayLHS :: [NamedArg A.Pattern] -> [WithOrigin A.Pattern] -> DisplayTerm -> TCM A.SpineLHS
     displayLHS ps wps d = do
         let (f, vs, es) = flattenWith d
-        ds <- mapM (namedArg <.> elimToPat) es
+        ds <- mapM (originFromNamedArg <.> elimToPat) es
         vs <- mapM elimToPat vs
         return $ SpineLHS i f vs (ds ++ wps)
       where
@@ -658,8 +658,8 @@ instance (Ord k, Monoid v) => Monoid (MonoidMap k v) where
 -- | Removes implicit arguments that are not needed, that is, that don't bind
 --   any variables that are actually used and doesn't do pattern matching.
 --   Doesn't strip any arguments that were written explicitly by the user.
-stripImplicits :: ([NamedArg A.Pattern], [A.Pattern]) ->
-                  TCM ([NamedArg A.Pattern], [A.Pattern])
+stripImplicits :: ([NamedArg A.Pattern], [WithOrigin A.Pattern]) ->
+                  TCM ([NamedArg A.Pattern], [WithOrigin A.Pattern])
 stripImplicits (ps, wps) = do          -- v if show-implicit we don't need the names
   ifM showImplicitArguments (return (map (unnamed . namedThing <$>) ps, wps)) $ do
     reportSLn "reify.implicit" 30 $ unlines
@@ -667,14 +667,15 @@ stripImplicits (ps, wps) = do          -- v if show-implicit we don't need the n
       , "  ps   = " ++ show ps
       , "  wps  = " ++ show wps
       ]
-    let allps       = ps ++ map defaultNamedArg wps
+    let allps       = ps ++ map originToNamedArg wps
         sps         = blankDots $ strip allps
-        (ps', wps') = splitAt (length sps - length wps) sps
+        (ps', wps0) = splitAt (length sps - length wps) sps
+        wps'        = map originFromNamedArg wps0
     reportSLn "reify.implicit" 30 $ unlines
       [ "  ps'  = " ++ show ps'
-      , "  wps' = " ++ show (map namedArg wps')
+      , "  wps' = " ++ show wps'
       ]
-    return (ps', map namedArg wps')
+    return (ps', wps')
     where
       -- Replace variables in dot patterns by an underscore _ if they are hidden
       -- in the pattern. This is slightly nicer than making the implicts explicit.
@@ -739,9 +740,11 @@ stripImplicits (ps, wps) = do          -- v if show-implicit we don't need the n
 class BlankVars a where
   blank :: Set Name -> a -> a
 
-instance BlankVars a => BlankVars (Arg a) where
+instance BlankVars a => BlankVars (WithOrigin a) where
   blank bound = fmap $ blank bound
 
+instance BlankVars a => BlankVars (Arg a) where
+  blank bound = fmap $ blank bound
 instance BlankVars a => BlankVars (Named s a) where
   blank bound = fmap $ blank bound
 
@@ -892,6 +895,9 @@ instance Binder LetBinding where
 instance Binder a => Binder (FieldAssignment' a) where
   varsBoundIn = varsBoundIn . (^. exprFieldA)
 
+instance Binder a => Binder (WithOrigin a) where
+  varsBoundIn = varsBoundIn . woThing
+
 instance Binder a => Binder (Arg a) where
   varsBoundIn = varsBoundIn . unArg
 
@@ -970,7 +976,7 @@ instance Reify NamedClause A.Clause where
       ++ "\n  toDrop = " ++ show toDrop
       ++ "\n  cl     = " ++ show cl
     ps  <- reifyPatterns $ namedClausePats cl
-    lhs <- liftTCM $ reifyDisplayFormP $ SpineLHS info f ps [] -- LHS info (LHSHead f ps) []
+    lhs <- liftTCM $ reifyDisplayFormP $ SpineLHS (clauseLHSInfo cl) f ps []
     -- Unless @toDrop@ we have already dropped the module patterns from the clauses
     -- (e.g. for extended lambdas).
     lhs <- if not toDrop then return lhs else do
@@ -985,9 +991,6 @@ instance Reify NamedClause A.Clause where
     reportSLn "reify.clause" 60 $ "reified NamedClause, result = " ++ show result
     return result
     where
-      perm = fromMaybe __IMPOSSIBLE__ $ clausePerm cl
-      info = LHSRange noRange
-
       dropParams n (SpineLHS i f ps wps) = SpineLHS i f (genericDrop n ps) wps
       stripImps (SpineLHS i f ps wps) = do
         (ps, wps) <- stripImplicits (ps, wps)

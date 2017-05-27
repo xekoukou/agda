@@ -675,7 +675,7 @@ niceDeclarations ds = do
       TypeSig _ x _        -> [x]
       Field _ x _          -> [x]
       FunClause (LHS p [] [] []) _ _ _
-        | IdentP (QName x) <- removeSingletonRawAppP p
+        | IdentP (QName x) <- removeSingletonRawAppP $ woThing p
                            -> [x]
       FunClause{}          -> []
       DataSig _ _ x _ _    -> [x]
@@ -788,7 +788,7 @@ niceDeclarations ds = do
             [] -> case lhs of
               -- Subcase: The lhs is single identifier (potentially anonymous).
               -- Treat it as a function clause without a type signature.
-              LHS p [] [] [] | Just x <- isSingleIdentifierP p -> do
+              LHS p [] [] [] | Just x <- isSingleIdentifierP $ woThing p -> do
                 d  <- mkFunDef defaultArgInfo termCheck x Nothing [d] -- fun def without type signature is relevant
                 return (d , ds)
               -- Subcase: The lhs is a proper pattern.
@@ -1056,10 +1056,12 @@ niceDeclarations ds = do
     expandEllipsis (d@(FunClause lhs@(LHS p ps _ _) _ _ _) : ds) =
       d : expand (wipe p) (map wipe ps) ds
       where
+        expand :: WithOrigin Pattern -> [WithOrigin Pattern] -> [Declaration] -> [Declaration]
         expand _ _ [] = []
         expand p ps (d@(Pragma (CatchallPragma r)) : ds) = d : expand p ps ds
-        expand p ps (FunClause (Ellipsis r ps' eqs es) rhs wh ca : ds) =
-          FunClause (LHS (setRange r p) ((setRange r ps) ++ ps') eqs es) rhs wh ca
+        expand p ps (FunClause (Ellipsis r ps0 eqs es) rhs wh ca : ds) =
+          let ps' = map (WithOrigin userWritten) ps0 in
+          FunClause (LHS (setRange r p) (setRange r ps ++ ps') eqs es) rhs wh ca
             : expand p (applyUnless (null es) (++ (map wipe ps')) ps) ds
                        -- If we have with-expressions (es /= []) then the following
                        -- ellipses also get the additional with patterns ps'
@@ -1077,8 +1079,9 @@ niceDeclarations ds = do
     expandEllipsis (_ : ds) = __IMPOSSIBLE__
 
     -- Before copying a pattern, remove traces to its origin.
-    wipe :: Pattern -> Pattern
-    wipe = killRange . setInserted
+    -- Mark it as coming from an ellipsis.
+    wipe :: WithOrigin Pattern -> WithOrigin Pattern
+    wipe = setOrigin (UserWritten FromEllipsis) . fmap (killRange . setInserted)
 
     setInserted :: Pattern -> Pattern
     setInserted p = case p of
@@ -1137,7 +1140,7 @@ niceDeclarations ds = do
     couldBeFunClauseOf mFixity x (FunClause Ellipsis{} _ _ _) = True
     couldBeFunClauseOf mFixity x (FunClause (LHS p _ _ _) _ _ _) =
       let
-      pns        = patternNames p
+      pns        = patternNames $ woThing p
       xStrings   = nameStringParts x
       patStrings = concatMap nameStringParts pns
       in

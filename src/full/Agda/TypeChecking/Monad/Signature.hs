@@ -22,6 +22,7 @@ import Data.Monoid
 import Agda.Syntax.Abstract.Name
 import Agda.Syntax.Abstract (Ren, ScopeCopyInfo(..))
 import Agda.Syntax.Common
+import Agda.Syntax.Info (LHSInfo(..))
 import Agda.Syntax.Internal as I
 import Agda.Syntax.Internal.Names
 import Agda.Syntax.Position
@@ -460,7 +461,7 @@ applySection' new ptel old ts ScopeCopyInfo{ renNames = rd, renModules = rm } = 
                   reportSLn "tc.mod.apply" 80 $ "new def for " ++ show x ++ "\n  " ++ show newDef
                   return newDef
 
-            cl = Clause { clauseLHSRange  = getRange $ defClauses d
+            cl = Clause { clauseLHSInfo   = LHSInfo (getRange $ defClauses d) Inserted
                         , clauseFullRange = getRange $ defClauses d
                         , clauseTel       = EmptyTel
                         , namedClausePats = []

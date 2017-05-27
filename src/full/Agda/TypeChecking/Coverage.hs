@@ -37,6 +37,7 @@ import qualified Data.Traversable as Trav
 import Agda.Syntax.Common
 import Agda.Syntax.Position
 import Agda.Syntax.Literal
+import Agda.Syntax.Info (LHSInfo(..))
 import Agda.Syntax.Internal
 import Agda.Syntax.Internal.Pattern
 
@@ -179,7 +180,7 @@ coverageCheck f t cs = do
   -- definitional equalities and --exact-split is enabled
   unless (null noex) $ do
       let noexclauses = map (cs !!) (Set.toList noex)
-      setCurrentRange (map clauseLHSRange noexclauses) $
+      setCurrentRange (map (getRange . clauseLHSInfo) noexclauses) $
         warning $ CoverageNoExactSplit f $ noexclauses
   return splitTree
 
@@ -350,7 +351,7 @@ inferMissingClause f (SClause tel ps _ mpsub (Just t)) = setCurrentRange f $ do
                   Instance  -> newIFSMeta "" (unArg t)
                   Hidden    -> __IMPOSSIBLE__
                   NotHidden -> __IMPOSSIBLE__
-    return $ Clause { clauseLHSRange  = noRange
+    return $ Clause { clauseLHSInfo   = LHSInfo noRange Inserted
                     , clauseFullRange = noRange
                     , clauseTel       = tel
                     , namedClausePats = ps

@@ -224,6 +224,7 @@ instance ExprLike Expr where
       PatternSyn{}            -> f e
       Macro{}                 -> f e
 
+instance ExprLike a => ExprLike (WithOrigin a) where
 instance ExprLike a => ExprLike (Arg a)     where
 instance ExprLike a => ExprLike (Named x a) where
 instance ExprLike a => ExprLike [a]         where

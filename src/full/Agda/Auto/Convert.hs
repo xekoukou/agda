@@ -12,6 +12,7 @@ import Control.Monad.State
 
 import Agda.Syntax.Common (Hiding(..), getHiding)
 import Agda.Syntax.Concrete (exprFieldA)
+import Agda.Syntax.Info
 import qualified Agda.Syntax.Internal as I
 import qualified Agda.Syntax.Internal.Pattern as IP
 import qualified Agda.Syntax.Common as Cm
@@ -650,7 +651,7 @@ frommyClause (ids, pats, mrhs) = do
           Just e -> Just <$> convert e
  let cperm =  Perm nv perm
  return $ I.Clause
-   { I.clauseLHSRange  = SP.noRange
+   { I.clauseLHSInfo   = LHSInfo SP.noRange Cm.Inserted
    , I.clauseFullRange = SP.noRange
    , I.clauseTel       = tel
    , I.namedClausePats = IP.numberPatVars __IMPOSSIBLE__ cperm $ applySubst (renamingR $ compactP cperm) ps

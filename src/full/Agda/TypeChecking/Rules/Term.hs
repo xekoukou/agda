@@ -32,6 +32,7 @@ import Agda.Syntax.Concrete (FieldAssignment'(..), nameFieldA, exprFieldA)
 import qualified Agda.Syntax.Concrete.Name as C
 import Agda.Syntax.Common
 import Agda.Syntax.Fixity
+import Agda.Syntax.Info (LHSInfo(..))
 import Agda.Syntax.Internal as I
 import Agda.Syntax.Position
 import Agda.Syntax.Literal
@@ -493,7 +494,7 @@ checkAbsurdLambda i h e t = do
             $ emptyFunction
               { funClauses        =
                   [Clause
-                    { clauseLHSRange  = getRange e
+                    { clauseLHSInfo   = LHSInfo (getRange e) Inserted
                     , clauseFullRange = getRange e
                     , clauseTel       = telFromList [fmap ("()",) dom]
                     , namedClausePats = [Arg info' $ Named (Just $ unranged $ absName b) $ AbsurdP $ debruijnNamedVar absurdPatternName 0]
@@ -1797,7 +1798,7 @@ checkHeadApplication e t hd args = do
             core   = A.LHSProj { A.lhsDestructor = AmbQ [flat]
                                , A.lhsFocus      = defaultNamedArg $ A.LHSHead c' []
                                , A.lhsPatsRight  = [] }
-            clause = A.Clause (A.LHS (A.LHSRange noRange) core []) []
+            clause = A.Clause (A.LHS (A.LHSInfo noRange Inserted) core []) []
                               (A.RHS arg Nothing)
                               [] False
 

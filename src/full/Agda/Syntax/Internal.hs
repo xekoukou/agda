@@ -39,6 +39,7 @@ import Data.Typeable (Typeable)
 
 import Agda.Syntax.Position
 import Agda.Syntax.Common
+import Agda.Syntax.Info
 import Agda.Syntax.Literal
 import Agda.Syntax.Concrete.Pretty (prettyHiding)
 import Agda.Syntax.Abstract.Name
@@ -376,7 +377,7 @@ stuckOn e r =
 --  For the purpose of the permutation and the body dot patterns count
 --  as variables. TODO: Change this!
 data Clause = Clause
-    { clauseLHSRange  :: Range
+    { clauseLHSInfo   :: LHSInfo
     , clauseFullRange :: Range
     , clauseTel       :: Telescope
       -- ^ @Δ@: The types of the pattern variables in dependency order.
@@ -399,7 +400,7 @@ clausePats :: Clause -> [Arg DeBruijnPattern]
 clausePats = map (fmap namedThing) . namedClausePats
 
 instance HasRange Clause where
-  getRange = clauseLHSRange
+  getRange = getRange . clauseLHSInfo
 
 -- | Pattern variables.
 type PatVarName = ArgName

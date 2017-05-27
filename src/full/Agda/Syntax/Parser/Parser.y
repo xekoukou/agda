@@ -48,6 +48,7 @@ import Agda.Syntax.Literal
 import Agda.TypeChecking.Positivity.Occurrence hiding (tests)
 
 import Agda.Utils.Either hiding (tests)
+import Agda.Utils.Functor
 import Agda.Utils.Hash
 import Agda.Utils.List ( spanJust, chopWhen )
 import Agda.Utils.Monad
@@ -1920,8 +1921,11 @@ validHaskellModuleName = all ok . splitOnDots
 -- | Turn an expression into a left hand side.
 exprToLHS :: Expr -> Parser ([Expr] -> [Expr] -> LHS)
 exprToLHS e = case e of
-  WithApp r e es -> LHS <$> exprToPattern e <*> mapM exprToPattern es
-  _              -> LHS <$> exprToPattern e <*> return []
+    WithApp r e es -> LHS <$> mkPat e <*> mapM mkPat es
+    _              -> LHS <$> mkPat e <*> return []
+  where
+    mkPat :: Expr -> Parser (WithOrigin Pattern)
+    mkPat = WithOrigin userWritten <.> exprToPattern
 
 -- | Turn an expression into a pattern. Fails if the expression is not a
 --   valid pattern.
@@ -2017,14 +2021,14 @@ funClauseOrTypeSigs lhs mrhs wh = do
         LHS _ _ _ (_:_) -> parseError "Illegal: with in type signature"
         LHS _ _ (_:_) _ -> parseError "Illegal: rewrite in type signature"
         LHS _ (_:_) _ _ -> parseError "Illegal: with patterns in type signature"
-        LHS p [] [] []  -> map (\ (x, y) -> TypeSig x y e) <$> patternToNames p
+        LHS p [] [] []  -> map (\ (x, y) -> TypeSig x y e) <$> patternToNames (woThing p)
       _ -> parseError "A type signature cannot have a where clause"
 
 parseDisplayPragma :: Range -> Position -> String -> Parser Pragma
 parseDisplayPragma r pos s =
   case parsePosString pos defaultParseFlags [normal] funclauseParser s of
     ParseOk s [FunClause (LHS lhs [] [] []) (RHS rhs) NoWhere ca] | null (parseInp s) ->
-      return $ DisplayPragma r lhs rhs
+      return $ DisplayPragma r (woThing lhs) rhs
     _ -> parseError "Invalid DISPLAY pragma. Should have form {-# DISPLAY LHS = RHS #-}."
 
 }

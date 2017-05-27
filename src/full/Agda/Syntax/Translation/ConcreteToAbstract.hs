@@ -41,6 +41,7 @@ import Agda.Syntax.Concrete as C hiding (topLevelModuleName)
 import Agda.Syntax.Concrete.Generic
 import Agda.Syntax.Concrete.Operators
 import Agda.Syntax.Abstract as A
+import Agda.Syntax.Abstract.Pattern
 import Agda.Syntax.Abstract.Pretty
 import qualified Agda.Syntax.Internal as I
 import Agda.Syntax.Position
@@ -77,6 +78,7 @@ import qualified Agda.Interaction.Options.Lenses as Lens
 import Agda.Utils.Either
 import Agda.Utils.Except ( MonadError(catchError, throwError) )
 import Agda.Utils.FileName
+import Agda.Utils.Function
 import Agda.Utils.Functor
 import Agda.Utils.Lens
 import Agda.Utils.List
@@ -1227,7 +1229,8 @@ instance ToAbstract LetDef [A.LetBinding] where
                      ]
 
       -- irrefutable let binding, like  (x , y) = rhs
-      NiceFunClause r PublicAccess ConcreteDef termCheck catchall d@(C.FunClause lhs@(C.LHS p [] [] []) (C.RHS rhs) NoWhere ca) -> do
+      NiceFunClause r PublicAccess ConcreteDef termCheck catchall d@(C.FunClause lhs@(C.LHS p0 [] [] []) (C.RHS rhs) NoWhere ca) -> do
+        let p = woThing p0
         mp  <- setCurrentRange p $
                  (Right <$> parsePattern p)
                    `catchError`
@@ -1294,7 +1297,7 @@ instance ToAbstract LetDef [A.LetBinding] where
             localToAbstract (snd $ lhsArgs p) $ \args ->
 -}
             (x, args) <- do
-              res <- setCurrentRange p $ parseLHS (C.QName top) p
+              res <- setCurrentRange p $ parseLHS (C.QName top) $ woThing p
               case res of
                 C.LHSHead x args -> return (x, args)
                 C.LHSProj{} -> genericError $ "copatterns not allowed in let bindings"
@@ -1810,7 +1813,7 @@ instance ToAbstract C.Pragma [A.Pragma] where
         UnknownName         -> notInScope top
         PatternSynResName d -> return . (True,) $ anameName d
 
-    lhs <- toAbstract $ LeftHandSide top lhs []
+    lhs <- toAbstract $ LeftHandSide top (WithOrigin userWritten lhs) []
     ps  <- case lhs of
              A.LHS _ (A.LHSHead _ ps) [] -> return ps
              _ -> err
@@ -1961,11 +1964,18 @@ instance ToAbstract C.RHS AbstractRHS where
     toAbstract C.AbsurdRHS = return $ AbsurdRHS'
     toAbstract (C.RHS e)   = RHS' <$> toAbstract e <*> pure e
 
-data LeftHandSide = LeftHandSide C.QName C.Pattern [C.Pattern]
+data LeftHandSide = LeftHandSide C.QName (WithOrigin C.Pattern) [WithOrigin C.Pattern]
 
 instance ToAbstract LeftHandSide A.LHS where
-    toAbstract (LeftHandSide top lhs wps) =
+    toAbstract (LeftHandSide top (WithOrigin lhsO lhs) wps0) =
       traceCall (ScopeCheckLHS top lhs) $ do
+        -- Andreas, 2017-05-27, issue #2589:
+        -- If the clause was expanded from an ellipsis,
+        -- we want to propagate this information to
+        -- all the patterns that came from the ellipsis.
+        let fromEllipsis = lhsO == UserWritten FromEllipsis
+            (wpsO, wps) = unzip $ map (\ (WithOrigin o x) -> (o,x)) wps0
+
         lhscore <- parseLHS top lhs
         reportSLn "scope.lhs" 5 $ "parsed lhs: " ++ show lhscore
         printLocals 10 "before lhs:"
@@ -1981,11 +1991,22 @@ instance ToAbstract LeftHandSide A.LHS where
         checkPatternLinearity $ lhsCoreAllPatterns lhscore ++ wps
         printLocals 10 "checked pattern:"
         -- scope check dot patterns
-        lhscore <- toAbstract lhscore
+        lhscore <- applyWhen fromEllipsis (markEllipsis <$>) $ toAbstract lhscore
         reportSLn "scope.lhs" 5 $ "parsed lhs dot patterns: " ++ show lhscore
-        wps     <- toAbstract wps
+        wps     <- markEllipsisWPS wpsO <$> toAbstract wps
         printLocals 10 "checked dots:"
-        return $ A.LHS (LHSRange $ getRange (lhs, wps)) lhscore wps
+        return $ A.LHS (LHSInfo (getRange (lhs, wps)) lhsO) lhscore wps
+      where
+      -- The following functions propagate the FromEllipsis info into all patterns
+      markEllipsis :: forall a. MapNamedArgPattern a => a -> a
+      markEllipsis = mapNamedArgPattern $ mapOrigin $ \case
+        UserWritten UserOrigin -> UserWritten FromEllipsis
+        o -> o
+      markEllipsisWPS :: [Origin] -> [A.Pattern] -> [WithOrigin A.Pattern]
+      markEllipsisWPS = zipWith $ \ o p -> WithOrigin o $
+        case o of
+          UserWritten FromEllipsis -> namedArg $ markEllipsis $ defaultNamedArg p
+          _ -> p
 
 -- does not check pattern linearity
 instance ToAbstract C.LHSCore (A.LHSCore' C.Expr) where

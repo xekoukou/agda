@@ -323,10 +323,10 @@ instance Eq RHS where
 --   Projection patterns are contained in @spLhsPats@,
 --   represented as @ProjP d@.
 data SpineLHS = SpineLHS
-  { spLhsInfo     :: LHSInfo             -- ^ Range.
-  , spLhsDefName  :: QName               -- ^ Name of function we are defining.
-  , spLhsPats     :: [NamedArg Pattern]  -- ^ Function parameters (patterns).
-  , spLhsWithPats :: [Pattern]           -- ^ @with@ patterns (after @|@).
+  { spLhsInfo     :: LHSInfo              -- ^ Range.
+  , spLhsDefName  :: QName                -- ^ Name of function we are defining.
+  , spLhsPats     :: [NamedArg Pattern]   -- ^ Function parameters (patterns).
+  , spLhsWithPats :: [WithOrigin Pattern] -- ^ @with@ patterns (after @|@).
   }
   deriving (Typeable, Data, Show, Eq)
 
@@ -339,7 +339,7 @@ instance Eq LHS where
 data LHS = LHS
   { lhsInfo     :: LHSInfo               -- ^ Range.
   , lhsCore     :: LHSCore               -- ^ Copatterns.
-  , lhsWithPats :: [Pattern]             -- ^ @with@ patterns (after @|@).
+  , lhsWithPats :: [WithOrigin Pattern]  -- ^ @with@ patterns (after @|@).
   }
   deriving (Typeable, Data, Show)
 

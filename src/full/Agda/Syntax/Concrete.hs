@@ -252,12 +252,14 @@ countTelVars tel =
    We use fixity information to see which name is actually defined.
 -}
 data LHS
-  = LHS { lhsOriginalPattern :: Pattern       -- ^ @f ps@
-        , lhsWithPattern     :: [Pattern]     -- ^ @| p@ (many)
+  = LHS { lhsOriginalPattern :: WithOrigin Pattern    -- ^ @f ps@
+        , lhsWithPattern     :: [WithOrigin Pattern]  -- ^ @| p@ (many)
         , lhsRewriteEqn      :: [RewriteEqn]  -- ^ @rewrite e@ (many)
         , lhsWithExpr        :: [WithExpr]    -- ^ @with e@ (many)
         }
-    -- ^ original pattern, with-patterns, rewrite equations and with-expressions
+    -- ^ Original pattern, with-patterns, rewrite equations and with-expressions.
+    --   We remember whether this @LHS@ was expanded from an @Ellipsis@,
+    --   hence the 'WithOrigin'.
   | Ellipsis Range [Pattern] [RewriteEqn] [WithExpr]
     -- ^ new with-patterns, rewrite equations and with-expressions
   deriving (Typeable, Data)
@@ -446,7 +448,7 @@ spanAllowedBeforeModule = span isAllowedBeforeModule
 mapLhsOriginalPattern :: (Pattern -> Pattern) -> LHS -> LHS
 mapLhsOriginalPattern f lhs@Ellipsis{}                    = lhs
 mapLhsOriginalPattern f lhs@LHS{ lhsOriginalPattern = p } =
-  lhs { lhsOriginalPattern = f p }
+  lhs { lhsOriginalPattern = fmap f p }
 
 {--------------------------------------------------------------------------
     Views
