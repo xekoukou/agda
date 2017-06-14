@@ -80,7 +80,9 @@ import Agda.Utils.Lens
 import Agda.Utils.Impossible
 
 data SplitClause = SClause
-  { scTel    :: Telescope
+  { scInfo   :: LHSInfo
+    -- ^ Remembering the info from the internal clause.
+  , scTel    :: Telescope
     -- ^ Type of variables in @scPats@.
   , scPats   :: [NamedArg DeBruijnPattern]
     -- ^ The patterns leading to the currently considered branch of
@@ -124,7 +126,8 @@ splitClauses (Covering _ qcs) = map snd qcs
 -- | Create a split clause from a clause in internal syntax. Used by make-case.
 clauseToSplitClause :: Clause -> SplitClause
 clauseToSplitClause cl = SClause
-  { scTel    = clauseTel  cl
+  { scInfo   = clauseLHSInfo cl
+  , scTel    = clauseTel cl
   , scPats   = namedClausePats cl
   , scSubst  = idS  -- Andreas, 2014-07-15  TODO: Is this ok?
   , scModuleParameterSub = Map.empty
@@ -146,7 +149,7 @@ coverageCheck f t cs = do
   fv           <- getDefFreeVars f
   moduleParams <- raise (n - fv) <$> use stModuleParameters
       -- construct the initial split clause
-  let sc = SClause gamma xs idS moduleParams $ Just $ defaultArg a
+  let sc = SClause empty gamma xs idS moduleParams $ Just $ defaultArg a
 
   reportSDoc "tc.cover.top" 10 $ do
     let prCl cl = addContext (clauseTel cl) $
@@ -198,12 +201,12 @@ data CoverResult = CoverResult
   , coverNoExactClauses  :: Set Nat
   }
 
--- | @cover f cs (SClause _ _ ps _) = return (splitTree, used, pss)@.
+-- | @cover f cs (SClause _ _ _ ps _) = return (splitTree, used, pss)@.
 --   checks that the list of clauses @cs@ covers the given split clause.
 --   Returns the @splitTree@, the @used@ clauses, and missing cases @pss@.
 cover :: QName -> [Clause] -> SplitClause ->
          TCM CoverResult
-cover f cs sc@(SClause tel ps _ _ target) = do
+cover f cs sc@(SClause _ tel ps _ _ target) = do
   reportSDoc "tc.cover.cover" 10 $ inTopContext $ vcat
     [ text "checking coverage of pattern:"
     , nest 2 $ text "tel  =" <+> prettyTCM tel
@@ -344,7 +347,7 @@ cover f cs sc@(SClause tel ps _ _ target) = do
       (q , addEtaSplits 0 (gatherEtaSplits n sc ps) t)
 
 inferMissingClause :: QName -> SplitClause -> TCM ()
-inferMissingClause f (SClause tel ps _ mpsub (Just t)) = setCurrentRange f $ do
+inferMissingClause f (SClause _ tel ps _ mpsub (Just t)) = setCurrentRange f $ do
   reportSDoc "tc.cover.infer" 20 $ addContext tel $ text "Trying to infer right-hand side of type" <+> prettyTCM t
   cl <- addContext tel $ withModuleParameters mpsub $ do
     (x, rhs) <- case getHiding t of
@@ -359,7 +362,7 @@ inferMissingClause f (SClause tel ps _ mpsub (Just t)) = setCurrentRange f $ do
                     , clauseType      = Just t
                     , clauseCatchall  = False }
   addClauses f [cl]
-inferMissingClause _ (SClause _ _ _ _ Nothing) = __IMPOSSIBLE__
+inferMissingClause _ (SClause _ _ _ _ _ Nothing) = __IMPOSSIBLE__
 
 splitStrategy :: BlockingVars -> Telescope -> TCM BlockingVars
 splitStrategy bs tel = return $ updateLast clearBlockingVarCons xs
@@ -445,7 +448,7 @@ fixTarget sc@SClause{ scTel = sctel, scPats = ps, scSubst = sigma, scModuleParam
         -- Dot patterns in @ps@ need to be raised!  (Issue 1298)
         ps'       = applySubst (raiseS n) ps ++ xs
         newTarget = Just $ a $> b
-        sc'       = SClause
+        sc'       = sc
           { scTel    = sctel'
           , scPats   = ps'
           , scSubst  = wkS n $ sigma -- Should be wkS instead of liftS since
@@ -481,9 +484,10 @@ hiddenInserted ai
   | visible ai = setOrigin userWritten ai
   | otherwise  = setOrigin Inserted ai
 
--- | @computeNeighbourhood delta1 delta2 d pars ixs hix tel ps mpsub con@
+-- | @computeNeighbourhood info delta1 delta2 d pars ixs hix tel ps mpsub con@
 --
 --   @
+--      info     'LHSInfo' from original split clause
 --      delta1   Telescope before split point
 --      n        Name of pattern variable at split point
 --      delta2   Telescope after split point
@@ -498,7 +502,8 @@ hiddenInserted ai
 --   @
 --   @dtype == d pars ixs@
 computeNeighbourhood
-  :: Telescope                    -- ^ Telescope before split point.
+  :: LHSInfo                      -- ^ 'LHSInfo' from original split clause.
+  -> Telescope                    -- ^ Telescope before split point.
   -> PatVarName                   -- ^ Name of pattern variable at split point.
   -> Telescope                    -- ^ Telescope after split point.
   -> QName                        -- ^ Name of datatype to split at.
@@ -510,7 +515,7 @@ computeNeighbourhood
   -> ModuleParamDict              -- ^ Current module parameter substitution.
   -> QName                        -- ^ Constructor to fit into hole.
   -> CoverM (Maybe SplitClause)   -- ^ New split clause if successful.
-computeNeighbourhood delta1 n delta2 d pars ixs hix tel ps mpsub c = do
+computeNeighbourhood info delta1 n delta2 d pars ixs hix tel ps mpsub c = do
 
   -- Get the type of the datatype
   dtype <- liftTCM $ (`piApply` pars) . defType <$> getConstInfo d
@@ -605,7 +610,7 @@ computeNeighbourhood delta1 n delta2 d pars ixs hix tel ps mpsub c = do
 
       let mpsub' = applySubst (fromPatternSubstitution rho) mpsub
 
-      return $ Just $ SClause delta' ps' rho mpsub' Nothing -- target fixed later
+      return $ Just $ SClause info delta' ps' rho mpsub' Nothing -- target fixed later
 
   where
     debugNames userNames0 userNames avoidNames =
@@ -673,7 +678,7 @@ splitClauseWithAbsurd c x = split' Inductive False c (BlockingVar x Nothing)
 
 splitLast :: Induction -> Telescope -> [NamedArg DeBruijnPattern] -> TCM (Either SplitError Covering)
 splitLast ind tel ps = split ind sc (BlockingVar 0 Nothing)
-  where sc = SClause tel ps empty empty Nothing
+  where sc = SClause empty tel ps empty empty Nothing
 
 -- | @split ind splitClause x = return res@
 --   splits @splitClause@ at pattern var @x@ (de Bruijn index).
@@ -735,7 +740,7 @@ split' :: Induction
        -> SplitClause
        -> BlockingVar
        -> TCM (Either SplitError (Either SplitClause Covering))
-split' ind fixtarget sc@(SClause tel ps _ mpsub target) (BlockingVar x mcons) = liftTCM $ runExceptT $ do
+split' ind fixtarget sc@(SClause info tel ps _ mpsub target) (BlockingVar x mcons) = liftTCM $ runExceptT $ do
 
   debugInit tel x ps mpsub
 
@@ -754,7 +759,7 @@ split' ind fixtarget sc@(SClause tel ps _ mpsub target) (BlockingVar x mcons) = 
   ns <- catMaybes <$> do
     forM cons $ \ con ->
       fmap (con,) <$> do
-        msc <- computeNeighbourhood delta1 n delta2 d pars ixs x tel ps mpsub con
+        msc <- computeNeighbourhood info delta1 n delta2 d pars ixs x tel ps mpsub con
         if not fixtarget then return msc else do
         Trav.forM msc $ \ sc -> lift $ snd <$> fixTarget sc{ scTarget = target }
 
@@ -766,7 +771,8 @@ split' ind fixtarget sc@(SClause tel ps _ mpsub target) (BlockingVar x mcons) = 
                                          else DBPatVar name y)
                   ps
       return $ Left $ SClause
-               { scTel  = telFromList $ telToList delta1 ++
+               { scInfo = info
+               , scTel  = telFromList $ telToList delta1 ++
                                         [fmap ((,) "()") t] ++ -- add name "()"
                                         telToList delta2
                , scPats = ps
@@ -832,7 +838,7 @@ split' ind fixtarget sc@(SClause tel ps _ mpsub target) (BlockingVar x mcons) = 
 --   otherwise @res == Nothing@.
 --   Note that the empty set of split clauses is returned if the record has no fields.
 splitResult :: QName -> SplitClause -> TCM (Maybe Covering)
-splitResult f sc@(SClause tel ps _ _ target) = do
+splitResult f sc@(SClause info tel ps _ _ target) = do
   reportSDoc "tc.cover.split" 10 $ vcat
     [ text "splitting result:"
     , nest 2 $ text "f      =" <+> text (show f)
@@ -881,10 +887,11 @@ splitResult f sc@(SClause tel ps _ _ target) = do
 
 -- | For debugging only.
 instance PrettyTCM SplitClause where
-  prettyTCM (SClause tel pats sigma mpsub target) = sep
+  prettyTCM (SClause info tel pats sigma mpsub target) = sep
     [ text "SplitClause"
     , nest 2 $ vcat
-      [ text "tel          =" <+> prettyTCM tel
+      [ text "info         =" <+> (text . show) info
+      , text "tel          =" <+> prettyTCM tel
       , text "pats         =" <+> sep (map (prettyTCM . namedArg) pats)
       , text "subst        =" <+> (text . show) sigma
       , text "mpsub        =" <+> prettyTCM mpsub

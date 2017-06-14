@@ -1,5 +1,25 @@
 {-# LANGUAGE CPP             #-}
 
+-- | This module provides functionality for interactive case splitting.
+--
+-- The main workhorse is the splitter of the coverage checker.
+--
+-- On issue #2589, preserving the ellipsis when case splitting:
+-- The grand idea is the following:
+-- We remember in the clause whether it was originally expanded
+-- from an ellipsis, and also for each pattern whether it
+-- came from that expansion ('UserOrigin' = 'FromEllipsis').
+-- There might be with-patterns that did not come from the ellipsis as well.
+-- ('UserOrigin' = 'UserOrigin')
+-- We can fold back to an ellipsis during printing
+-- if no non-dot pattern that came from the ellipsis
+-- was modified by the splitter ('UserOrigin' = 'ModifiedEllipsis').
+-- Modification happens during pattern substitution in 'computeNeighborhood'.
+-- We need to make sure that pattern substitution also updates
+-- the origin.  It seems to make most sense to store the
+-- origin in the pattern, not in the ArgInfo, unless we
+-- substitute @Arg Pattern@s for @Arg@ pattern variables.
+
 module Agda.Interaction.MakeCase where
 
 import Prelude hiding (mapM, mapM_, null)
@@ -298,7 +318,7 @@ makePatternVarsVisible is sc@SClause{ scPats = ps } =
 -- | Make clause with no rhs (because of absurd match).
 
 makeAbsurdClause :: QName -> SplitClause -> TCM A.Clause
-makeAbsurdClause f (SClause tel ps _ _ t) = do
+makeAbsurdClause f (SClause info tel ps _ _ t) = do
   reportSDoc "interaction.case" 10 $ vcat
     [ text "Interaction.MakeCase.makeAbsurdClause: split clause:"
     , nest 2 $ vcat
@@ -312,7 +332,7 @@ makeAbsurdClause f (SClause tel ps _ _ t) = do
     -- Contract implicit record patterns before printing.
     -- c <- translateRecordPatterns $ Clause noRange tel perm ps NoBody t False
     -- Jesper, 2015-09-19 Don't contract, since we do on-demand splitting
-    let c = Clause empty noRange tel ps Nothing t False
+    let c = Clause info noRange tel ps Nothing t False
     -- Normalise the dot patterns
     ps <- addContext tel $ normalise $ namedClausePats c
     reportSDoc "interaction.case" 60 $ text "normalized patterns: " <+> text (show ps)
