@@ -55,9 +55,9 @@ homogeneous composition and generalized transport. This is what makes
 the general schema for higher inductive types work, following the
 `CHM`_ paper.
 
-To use the cubical mode Agda needs to be run with the ``--cubical``
-command-line-option or with ``{-# OPTIONS --cubical #-}`` at the top
-of the file.
+To use the cubical mode Agda needs to be run with the
+:option:`--cubical` command-line-option or with ``{-#
+OPTIONS --cubical #-}`` at the top of the file.
 
 The cubical mode adds the following features to Agda:
 
@@ -365,7 +365,7 @@ cases doesn't have to match the interval formula exactly):
                         ; (i = i1) (j = i1) → true
                         ; (i = i0)          → false }
 
-Furthermore ``IsOne i0`` is actually absurd
+Furthermore ``IsOne i0`` is actually absurd.
 
 ::
 
@@ -404,6 +404,10 @@ They satisfy the following equalities:
 
   outS {φ = i1} {u} _ = u 1=1
 
+
+Note that given ``a : A [ φ ↦ u ]`` and ``α : IsOne φ``, it is not the case
+that ``outS a = u α``; however, underneath the pattern binding ``(φ = i1)``,
+one has ``outS a = u 1=1``.
 
 With all of this cubical infrastructure we can now describe the
 ``hcomp`` operations.

@@ -642,11 +642,11 @@ getConstraintsMentioning norm m = getConstrs instantiateBlockingFull (mentionsMe
       reportSDoc "constr.ment" 20 $ "getConstraintsMentioning"
       forM cs $ \(PConstr s c) -> do
         c <- normalForm norm c
-        case hasHeadMeta $ clValue c of
-          Just es_m -> do
+        case allApplyElims =<< hasHeadMeta (clValue c) of
+          Just as_m -> do
             -- unifyElimsMeta tries to move the constraint into
             -- (an extension of) the context where @m@ comes from.
-            unifyElimsMeta m es_m c $ \ eqs c -> do
+            unifyElimsMeta m as_m c $ \ eqs c -> do
               flip enterClosure abstractToConcrete_ =<< reify . PConstr s =<< buildClosure c
           _ -> do
             cl <- reify $ PConstr s c
@@ -963,7 +963,7 @@ contextOfMeta ii norm = withInteractionId ii $ do
   where
     mkVar :: Dom (Name, Type) -> TCM (Maybe ResponseContextEntry)
     mkVar Dom{ domInfo = ai, unDom = (name, t) } = do
-      if shouldHide name then return Nothing else Just <$> do
+      if shouldHide ai name then return Nothing else Just <$> do
         let n = nameConcrete name
         x  <- abstractToConcrete_ name
         let s = C.isInScope x
@@ -973,7 +973,7 @@ contextOfMeta ii norm = withInteractionId ii $ do
     mkLet :: (Name, Open (Term, Dom Type)) -> TCM (Maybe ResponseContextEntry)
     mkLet (name, lb) = do
       (tm, !dom) <- getOpen lb
-      if shouldHide name then return Nothing else Just <$> do
+      if shouldHide (domInfo dom) name then return Nothing else Just <$> do
         let n = nameConcrete name
         x  <- abstractToConcrete_ name
         let s = C.isInScope x
@@ -981,8 +981,8 @@ contextOfMeta ii norm = withInteractionId ii $ do
         v  <- reifyUnblocked =<< normalForm norm tm
         return $ ResponseContextEntry n x ty (Just v) s
 
-    shouldHide :: A.Name -> Bool
-    shouldHide n = isNoName n || nameIsRecordName n
+    shouldHide :: ArgInfo -> A.Name -> Bool
+    shouldHide ai n = not (isInstance ai) && (isNoName n || nameIsRecordName n)
 
 -- | Returns the type of the expression in the current environment
 --   We wake up irrelevant variables just in case the user want to

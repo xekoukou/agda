@@ -433,6 +433,7 @@ applySection' new ptel old ts ScopeCopyInfo{ renNames = rd, renModules = rm } = 
                     , defNoCompilation  = defNoCompilation d
                     , defInjective      = False
                     , defCopatternLHS   = isCopatternLHS [cl]
+                    , defBlocked        = defBlocked d
                     , theDef            = df }
             oldDef = theDef d
             isCon  = case oldDef of { Constructor{} -> True ; _ -> False }
@@ -612,7 +613,7 @@ whatInduction c = liftTCM $ do
   mz <- getBuiltinName' builtinIZero
   mo <- getBuiltinName' builtinIOne
   case def of
-    Datatype{ dataInduction = i } -> return i
+    Datatype{}                    -> return Inductive
     Record{} | not (recRecursive def) -> return Inductive
     Record{ recInduction = i    } -> return $ fromMaybe Inductive i
     Constructor{ conInd = i }     -> return i

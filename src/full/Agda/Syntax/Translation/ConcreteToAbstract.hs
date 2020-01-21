@@ -1761,8 +1761,8 @@ instance ToAbstract NiceDeclaration A.Declaration where
         Nothing -> return Nothing
         Just (AsName (Right asName) r)                    -> return $ Just $ AsName asName r
         Just (AsName (Left (C.Ident (C.QName asName))) r) -> return $ Just $ AsName asName r
+        Just (AsName (Left C.Underscore{})     r)         -> return $ Just $ AsName underscore r
         Just (AsName (Left (C.Ident C.Qual{})) r) -> illformedAs "; a qualified name is not allowed here"
-        Just (AsName (Left C.Underscore{})     r) -> illformedAs "; an underscore is not allowed here"
         Just (AsName (Left e)                  r) -> illformedAs ""
 
       -- First scope check the imported module and return its name and
@@ -1786,14 +1786,15 @@ instance ToAbstract NiceDeclaration A.Declaration where
       -- Bind the desired module name to the right abstract name.
       case as of
         Nothing -> bindQModule (PrivateAccess Inserted) x m
-        Just y  -> bindModule (PrivateAccess Inserted) (asName y) m
+        Just y -> (unless . isNoName) (asName y) $
+          bindModule (PrivateAccess Inserted) (asName y) m
 
       printScope "import" 10 "merged imported sig:"
 
       -- Open if specified, otherwise apply import directives
       let (name, theAsSymbol, theAsName) = case as of
-            Nothing -> (x,                  noRange,   Nothing)
-            Just a  -> (C.QName (asName a), asRange a, Just (asName a))
+            Just a | (not . isNoName) (asName a) -> (C.QName (asName a), asRange a, Just (asName a))
+            _                                    -> (x,                  noRange,   Nothing)
       adir <- case open of
         DoOpen   -> do
           -- Andreas, 2019-05-29, issue #3818.
@@ -2275,11 +2276,7 @@ whereToAbstract r whname whds inner = do
   am  <- toAbstract (NewModuleName m)
   (scope, ds) <- scopeCheckModule r (C.QName m) am tel $ toAbstract whds
   setScope scope
-  x <- localScope $ do
-    -- Andreas, 2019-05-30, issue #3823:
-    -- Temporarily bind where-module here so it can be referenced in rhs
-    bindModule acc m am
-    inner
+  x <- inner
   setCurrentModule old
   bindModule acc m am
   -- Issue 848: if the module was anonymous (module _ where) open it public

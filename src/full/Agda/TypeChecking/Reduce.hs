@@ -297,9 +297,13 @@ instance Reduce Sort where
     reduce' s = do
       s <- instantiate' s
       case s of
-        PiSort a s -> do
-          (a,s) <- reduce' (a,s)
-          maybe (return $ PiSort a s) reduce' $ piSort' a s
+        PiSort a s2 -> do
+          (s1' , s2') <- reduce' (getSort a , s2)
+          let a' = set lensSort s1' a
+          maybe (return $ PiSort a' s2') reduce' $ piSort' a' s2'
+        FunSort s1 s2 -> do
+          (s1' , s2') <- reduce (s1 , s2)
+          maybe (return $ FunSort s1' s2') reduce' $ funSort' s1' s2'
         UnivSort s' -> do
           s' <- reduce' s'
           ui <- univInf
@@ -527,6 +531,7 @@ unfoldDefinition' unfoldDelayed keepGoing v0 f es = do
 unfoldDefinitionStep :: Bool -> Term -> QName -> Elims -> ReduceM (Reduced (Blocked Term) Term)
 unfoldDefinitionStep unfoldDelayed v0 f es =
   {-# SCC "reduceDef" #-} do
+  traceSDoc "tc.reduce" 90 ("unfoldDefinitionStep v0" <+> prettyTCM v0) $ do
   info <- getConstInfo f
   rewr <- instantiateRewriteRules =<< getRewriteRulesFor f
   allowed <- asksTC envAllowedReductions
@@ -536,7 +541,7 @@ unfoldDefinitionStep unfoldDelayed v0 f es =
       -- Non-terminating functions
       -- (i.e., those that failed the termination check)
       -- and delayed definitions
-      -- are not unfolded unless explicitely permitted.
+      -- are not unfolded unless explicitly permitted.
       dontUnfold =
         (defNonterminating info && notElem NonTerminatingReductions allowed)
         || (defTerminationUnconfirmed info && notElem UnconfirmedReductions allowed)
@@ -591,9 +596,14 @@ unfoldDefinitionStep unfoldDelayed v0 f es =
 
     reduceNormalE :: Term -> QName -> [MaybeReduced Elim] -> Bool -> [Clause] -> Maybe CompiledClauses -> RewriteRules -> ReduceM (Reduced (Blocked Term) Term)
     reduceNormalE v0 f es dontUnfold def mcc rewr = {-# SCC "reduceNormal" #-} do
+      traceSDoc "tc.reduce" 90 ("reduceNormalE v0 =" <+> prettyTCM v0) $ do
       case (def,rewr) of
-        _ | dontUnfold -> defaultResult -- non-terminating or delayed
-        ([],[])        -> defaultResult -- no definition for head
+        _ | dontUnfold -> traceSLn "tc.reduce" 90 "reduceNormalE: don't unfold (non-terminating or delayed)" $
+                          defaultResult -- non-terminating or delayed
+        ([],[])        -> traceSLn "tc.reduce" 90 "reduceNormalE: no clauses or rewrite rules" $ do
+          -- no definition for head
+          blk <- defBlocked <$> getConstInfo f
+          noReduction $ blk $> vfull
         (cls,rewr)     -> do
           ev <- appDefE_ f v0 cls mcc rewr es
           debugReduce ev
@@ -709,6 +719,7 @@ appDef v cc rewr args = appDefE v cc rewr $ map (fmap Apply) args
 
 appDefE :: Term -> CompiledClauses -> RewriteRules -> MaybeReducedElims -> ReduceM (Reduced (Blocked Term) Term)
 appDefE v cc rewr es = do
+  traceSDoc "tc.reduce" 90 ("appDefE v = " <+> prettyTCM v) $ do
   r <- matchCompiledE cc es
   case r of
     YesReduction simpl t -> return $ YesReduction simpl t
@@ -719,7 +730,8 @@ appDef' :: Term -> [Clause] -> RewriteRules -> MaybeReducedArgs -> ReduceM (Redu
 appDef' v cls rewr args = appDefE' v cls rewr $ map (fmap Apply) args
 
 appDefE' :: Term -> [Clause] -> RewriteRules -> MaybeReducedElims -> ReduceM (Reduced (Blocked Term) Term)
-appDefE' v cls rewr es = goCls cls $ map ignoreReduced es
+appDefE' v cls rewr es = traceSDoc "tc.reduce" 90 ("appDefE' v = " <+> prettyTCM v) $ do
+  goCls cls $ map ignoreReduced es
   where
     goCls :: [Clause] -> [Elim] -> ReduceM (Reduced (Blocked Term) Term)
     goCls cl es = do
@@ -860,6 +872,7 @@ instance Simplify Sort where
     simplify' s = do
       case s of
         PiSort a s -> piSort <$> simplify' a <*> simplify' s
+        FunSort s1 s2 -> funSort <$> simplify' s1 <*> simplify' s2
         UnivSort s -> do
           ui <- univInf
           univSort ui <$> simplify' s
@@ -1007,6 +1020,7 @@ instance Normalise Sort where
       s <- reduce' s
       case s of
         PiSort a s -> piSort <$> normalise' a <*> normalise' s
+        FunSort s1 s2 -> funSort <$> normalise' s1 <*> normalise' s2
         UnivSort s -> do
           ui <- univInf
           univSort ui <$> normalise' s
@@ -1191,6 +1205,7 @@ instance InstantiateFull Sort where
             Type n     -> Type <$> instantiateFull' n
             Prop n     -> Prop <$> instantiateFull' n
             PiSort a s -> piSort <$> instantiateFull' a <*> instantiateFull' s
+            FunSort s1 s2 -> funSort <$> instantiateFull' s1 <*> instantiateFull' s2
             UnivSort s -> do
               ui <- univInf
               univSort ui <$> instantiateFull' s

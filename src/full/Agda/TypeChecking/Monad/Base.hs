@@ -1094,18 +1094,18 @@ instance TermLike Constraint where
       ValueCmp _ t u v       -> foldTerm f (t, u, v)
       ValueCmpOnFace _ p t u v -> foldTerm f (p, t, u, v)
       ElimCmp _ _ t u es es' -> foldTerm f (t, u, es, es')
-      LevelCmp _ l l'        -> foldTerm f (l, l')
+      LevelCmp _ l l'        -> foldTerm f (Level l, Level l')
       IsEmpty _ t            -> foldTerm f t
       CheckSizeLtSat u       -> foldTerm f u
       UnquoteTactic _ t h g  -> foldTerm f (t, h, g)
       Guarded c _            -> foldTerm f c
       TelCmp _ _ _ tel1 tel2 -> foldTerm f (tel1, tel2)
-      SortCmp _ s1 s2        -> foldTerm f (s1, s2)
+      SortCmp _ s1 s2        -> foldTerm f (Sort s1, Sort s2)
       UnBlock _              -> mempty
       FindInstance _ _ _     -> mempty
       CheckFunDef _ _ _ _    -> mempty
       HasBiggerSort s        -> foldTerm f s
-      HasPTSRule a s         -> foldTerm f (a, s)
+      HasPTSRule a s         -> foldTerm f (a, Sort <$> s)
       CheckMetaInst m        -> mempty
   traverseTermM f c = __IMPOSSIBLE__ -- Not yet implemented
 
@@ -1728,6 +1728,10 @@ data Definition = Defn
     -- ^ Should the def be treated as injective by the pattern matching unifier?
   , defCopatternLHS   :: Bool
     -- ^ Is this a function defined by copatterns?
+  , defBlocked        :: Blocked_
+    -- ^ What blocking tag to use when we cannot reduce this def?
+    --   Used when checking a function definition is blocked on a meta
+    --   in the type.
   , theDef            :: Defn
   }
     deriving (Data, Show)
@@ -1769,6 +1773,7 @@ defaultDefn info x t def = Defn
   , defNoCompilation  = False
   , defInjective      = False
   , defCopatternLHS   = False
+  , defBlocked        = NotBlocked ReallyNotBlocked ()
   , theDef            = def
   }
 
@@ -1969,7 +1974,6 @@ data Defn = Axiom -- ^ Postulate
           | Datatype
             { dataPars           :: Nat            -- ^ Number of parameters.
             , dataIxs            :: Nat            -- ^ Number of indices.
-            , dataInduction      :: Induction      -- ^ @data@ or @codata@ (legacy).
             , dataClause         :: (Maybe Clause) -- ^ This might be in an instantiated module.
             , dataCons           :: [QName]
               -- ^ Constructor names , ordered according to the order of their definition.
@@ -2088,7 +2092,6 @@ instance Pretty Defn where
     "Datatype {" <?> vcat
       [ "dataPars       =" <?> pshow dataPars
       , "dataIxs        =" <?> pshow dataIxs
-      , "dataInduction  =" <?> pshow dataInduction
       , "dataClause     =" <?> pretty dataClause
       , "dataCons       =" <?> pshow dataCons
       , "dataSort       =" <?> pretty dataSort
@@ -3242,7 +3245,11 @@ data TerminationError = TerminationError
 data SplitError
   = NotADatatype        (Closure Type)  -- ^ Neither data type nor record.
   | IrrelevantDatatype  (Closure Type)  -- ^ Data type, but in irrelevant position.
-  | ErasedDatatype      (Closure Type)  -- ^ Data type, but in erased position.
+  | ErasedDatatype Bool (Closure Type)  -- ^ Data type, but in erased position.
+                                        --   If the boolean is 'True',
+                                        --   then the reason for the
+                                        --   error is that the K rule
+                                        --   is turned off.
   | CoinductiveDatatype (Closure Type)  -- ^ Split on codata not allowed.
   -- UNUSED, but keep!
   -- -- | NoRecordConstructor Type  -- ^ record type, but no constructor
@@ -3273,6 +3280,7 @@ data UnificationFailure
   = UnifyIndicesNotVars Telescope Type Term Term Args -- ^ Failed to apply injectivity to constructor of indexed datatype
   | UnifyRecursiveEq Telescope Type Int Term          -- ^ Can't solve equation because variable occurs in (type of) lhs
   | UnifyReflexiveEq Telescope Type Term              -- ^ Can't solve reflexive equation because --without-K is enabled
+  | UnifyUnusableModality Telescope Type Int Term Modality  -- ^ Can't solve equation because solution modality is less "usable"
   deriving (Show)
 
 data UnquoteError
@@ -4203,8 +4211,8 @@ instance KillRange Section where
   killRange (Section tel) = killRange1 Section tel
 
 instance KillRange Definition where
-  killRange (Defn ai name t pols occs gens gpars displ mut compiled inst copy ma nc inj copat def) =
-    killRange17 Defn ai name t pols occs gens gpars displ mut compiled inst copy ma nc inj copat def
+  killRange (Defn ai name t pols occs gens gpars displ mut compiled inst copy ma nc inj copat blk def) =
+    killRange18 Defn ai name t pols occs gens gpars displ mut compiled inst copy ma nc inj copat blk def
     -- TODO clarify: Keep the range in the defName field?
 
 instance KillRange NumGeneralizableArgs where
@@ -4260,7 +4268,7 @@ instance KillRange Defn where
       AbstractDefn{} -> __IMPOSSIBLE__ -- only returned by 'getConstInfo'!
       Function cls comp ct tt covering inv mut isAbs delayed proj flags term extlam with ->
         killRange14 Function cls comp ct tt covering inv mut isAbs delayed proj flags term extlam with
-      Datatype a b c d e f g h i     -> killRange8 Datatype a b c d e f g h i
+      Datatype a b c d e f g h       -> killRange7 Datatype a b c d e f g h
       Record a b c d e f g h i j k   -> killRange11 Record a b c d e f g h i j k
       Constructor a b c d e f g h i j-> killRange10 Constructor a b c d e f g h i j
       Primitive a b c d e            -> killRange5 Primitive a b c d e

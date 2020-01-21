@@ -324,6 +324,7 @@ instance PrettyTCM UnifyState where
 
 initUnifyState :: Telescope -> FlexibleVars -> Type -> Args -> Args -> TCM UnifyState
 initUnifyState tel flex a lhs rhs = do
+  (tel, a, lhs, rhs) <- instantiateFull (tel, a, lhs, rhs)
   let n = size lhs
   unless (n == size rhs) __IMPOSSIBLE__
   TelV eqTel _ <- telView a
@@ -670,15 +671,14 @@ dataStrategy k s = do
     Def d es | Type{} <- getSort a -> do
       npars <- catMaybesMP $ liftTCM $ getNumberOfParameters d
       let (pars,ixs) = splitAt npars $ fromMaybe __IMPOSSIBLE__ $ allApplyElims es
-      hpars <- fromMaybeMP $ isHom k pars
-      liftTCM $ reportSDoc "tc.lhs.unify" 40 $ addContext (varTel s) $
+      liftTCM $ reportSDoc "tc.lhs.unify" 40 $ addContext (varTel s `abstract` eqTel s) $
         "Found equation at datatype " <+> prettyTCM d
-         <+> " with (homogeneous) parameters " <+> prettyTCM hpars
+         <+> " with parameters " <+> prettyTCM (raise (size (eqTel s) - k) pars)
       case (u, v) of
-        (Con c _ _   , Con c' _ _  ) | c == c' -> return $ Injectivity k a d hpars ixs c
-        (Con c _ _   , Con c' _ _  ) -> return $ Conflict k a d hpars u v
-        (Var i []  , v         ) -> ifOccursStronglyRigid i v $ return $ Cycle k a d hpars i v
-        (u         , Var j []  ) -> ifOccursStronglyRigid j u $ return $ Cycle k a d hpars j u
+        (Con c _ _   , Con c' _ _  ) | c == c' -> return $ Injectivity k a d pars ixs c
+        (Con c _ _   , Con c' _ _  ) -> return $ Conflict k a d pars u v
+        (Var i []  , v         ) -> ifOccursStronglyRigid i v $ return $ Cycle k a d pars i v
+        (u         , Var j []  ) -> ifOccursStronglyRigid j u $ return $ Cycle k a d pars j u
         _ -> mzero
     _ -> mzero
   where
@@ -886,126 +886,22 @@ unifyStep s Deletion{ deleteAt = k , deleteType = a , deleteLeft = u , deleteRig
         tellUnifyProof sigma
         Unifies <$> liftTCM (lensEqTel reduce s')
 
-unifyStep s Solution{ solutionAt   = k
-                    , solutionType = dom@Dom{ unDom = a }
-                    , solutionVar  = fi@FlexibleVar{ flexVar = i }
-                    , solutionTerm = u } = do
-  let m = varCount s
-
-  -- Now we have to be careful about forced variables in `u`. If they appear
-  -- in pattern positions we need to bind them there rather in their forced positions. We can safely
-  -- ignore non-pattern positions and forced pattern positions, because in that case there will be
-  -- other equations where the variable can be bound.
-  -- NOTE: If we're doing make-case we ignore forced variables. This is safe since we take the
-  -- result of unification and build user clauses that will be checked again with forcing turned on.
-  inMakeCase <- viewTC eMakeCase
-  let forcedVars | inMakeCase = IntMap.empty
-                 | otherwise  = IntMap.fromList [ (flexVar fi, getModality fi) | fi <- flexVars s,
-                                                                                 flexForced fi == Forced ]
-  (p, bound) <- patternBindingForcedVars forcedVars u
-
-  -- To maintain the invariant that each variable in varTel is bound exactly once in the pattern
-  -- subtitution we need to turn the bound variables in `p` into dot patterns in the rest of the
-  -- substitution.
-  let dotSub = foldr composeS idS [ inplaceS i (dotP (Var i [])) | i <- IntMap.keys bound ]
-
-  -- We moved the binding site of some forced variables, so we need to update their modalities in
-  -- the telescope. The new modality is the combination of the modality of the variable we are
-  -- instantiating and the modality of the binding site in the pattern (return by
-  -- patternBindingForcedVars).
-  let updModality md vars tel
-        | IntMap.null vars = tel
-        | otherwise        = telFromList $ zipWith upd (downFrom $ size tel) (telToList tel)
-        where
-          upd i a | Just md' <- IntMap.lookup i vars = setModality (md <> md') a
-                  | otherwise                        = a
-  s <- return $ s { varTel = updModality (getModality fi) bound (varTel s) }
-
-  reportSDoc "tc.lhs.unify.force" 45 $ vcat
-    [ "forcedVars =" <+> pretty (IntMap.keys forcedVars)
-    , "u          =" <+> prettyTCM u
-    , "p          =" <+> prettyTCM p
-    , "bound      =" <+> pretty (IntMap.keys bound)
-    , "dotSub     =" <+> pretty dotSub ]
-
-  -- Check that the type of the variable is equal to the type of the equation
-  -- (not just a subtype), otherwise we cannot instantiate (see Issue 2407).
-  let dom'@Dom{ unDom = a' } = getVarType (m-1-i) s
-  equalTypes <- liftTCM $ addContext (varTel s) $ tryCatch $ do
-    reportSDoc "tc.lhs.unify" 45 $ "Equation type: " <+> prettyTCM a
-    reportSDoc "tc.lhs.unify" 45 $ "Variable type: " <+> prettyTCM a'
-    dontAssignMetas $ noConstraints $ equalType a a'
-
-  -- The conditions on the relevances are as follows (see #2640):
-  -- - If the type of the equation is relevant, then the solution must be
-  --   usable in a relevant position.
-  -- - If the type of the equation is (shape-)irrelevant, then the solution
-  --   must be usable in a μ-relevant position where μ is the relevance
-  --   of the variable being solved.
-  --
-  -- Jesper, Andreas, 2018-10-17: the quantity of the equation is morally
-  -- always @Quantity0@, since the indices of the data type are runtime erased.
-  -- Thus, we need not change the quantity of the solution.
-  let eqrel  = getRelevance dom
-      eqmod  = getModality dom
-      varmod = getModality dom'
-      mod    = applyUnless (NonStrict `moreRelevant` eqrel) (setRelevance eqrel)
-             $ varmod
-  reportSDoc "tc.lhs.unify" 65 $ text $ "Equation modality: " ++ show (getModality dom)
-  reportSDoc "tc.lhs.unify" 65 $ text $ "Variable modality: " ++ show varmod
-  reportSDoc "tc.lhs.unify" 65 $ text $ "Solution must be usable in a " ++ show mod ++ " position."
-  -- Andreas, 2018-10-18
-  -- Currently, the modality check that would correspond to the
-  -- relevance check has problems with meta-variables created in the type signature,
-  -- and thus, in quantity 0, that get into terms using the unifier,
-  -- and there are checked to be non-erased, i.e., have quantity ω.
-  -- Thus, at the moment we only check relevances, being aware
-  -- that uses of the 0-quantity might create segfaults in the compiled program
-  -- situations analogous to #2640 (issue with projecting forced constructor fields).
-  --
-  -- usable <- liftTCM $ addContext (varTel s) $ usableMod mod u  -- TODO
-  usable <- liftTCM $ addContext (varTel s) $ usableRel (getRelevance mod) u
-  reportSDoc "tc.lhs.unify" 45 $ "Modality ok: " <+> prettyTCM usable
-  unless usable $ reportSLn "tc.lhs.unify" 65 $ "Rejected solution: " ++ show u
-
-  -- We need a Flat equality to solve a Flat variable.
-  -- This also ought to take care of the need for a usableCohesion check.
-  if not (getCohesion eqmod `moreCohesion` getCohesion varmod) then return $ DontKnow [] else do
-
-  case equalTypes of
-    Just err -> return $ DontKnow []
-    Nothing | usable -> caseMaybeM (trySolveVar (m-1-i) p s)
-      -- Case: Nothing
-      (return $ DontKnow [UnifyRecursiveEq (varTel s) a i u])
-      -- Case: Just
-      $ \ (s', sub) -> do
-        let rho = sub `composeS` dotSub
-        tellUnifySubst rho
-        let (s'', sigma) = solveEq k (applyPatSubst rho u) s'
-        tellUnifyProof sigma
-        return $ Unifies s''
-        -- Andreas, 2019-02-23, issue #3578: do not eagerly reduce
-        -- Unifies <$> liftTCM (reduce s'')
-    Nothing -> return $ DontKnow []
-  where
-    trySolveVar i p s = case solveVar i p s of
-      Just x  -> return $ Just x
-      Nothing -> do
-        -- Ulf, 2019-10-04: What is this doing?
-        u <- liftTCM $ normalise u
-        s <- liftTCM $ lensVarTel normalise s
-        return $ solveVar i (dotP u) s
+unifyStep s step@Solution{} = solutionStep RetryNormalised s step
 
 unifyStep s (Injectivity k a d pars ixs c) = do
   ifM (liftTCM $ consOfHIT $ conName c) (return $ DontKnow []) $ do
   withoutK <- liftTCM withoutKOption
   let n = eqCount s
 
+  -- Split equation telescope into parts before and after current equation
+  let (eqListTel1, _ : eqListTel2) = splitAt k $ telToList $ eqTel s
+      (eqTel1, eqTel2) = (telFromList eqListTel1, telFromList eqListTel2)
+
   -- Get constructor telescope and target indices
   cdef  <- liftTCM (getConInfo c)
   let ctype  = defType cdef `piApply` pars
       forced = defForced cdef
-  addContext (varTel s) $ reportSDoc "tc.lhs.unify" 40 $
+  addContext (varTel s `abstract` eqTel1) $ reportSDoc "tc.lhs.unify" 40 $
     "Constructor type: " <+> prettyTCM ctype
   TelV ctel ctarget <- liftTCM $ telView ctype
   let cixs = case unEl ctarget of
@@ -1016,12 +912,8 @@ unifyStep s (Injectivity k a d pars ixs c) = do
 
   -- Get index telescope of the datatype
   dtype    <- (`piApply` pars) . defType <$> liftTCM (getConstInfo d)
-  addContext (varTel s) $ reportSDoc "tc.lhs.unify" 40 $
+  addContext (varTel s `abstract` eqTel1) $ reportSDoc "tc.lhs.unify" 40 $
     "Datatype type: " <+> prettyTCM dtype
-
-  -- Split equation telescope into parts before and after current equation
-  let (eqListTel1, _ : eqListTel2) = splitAt k $ telToList $ eqTel s
-      (eqTel1, eqTel2) = (telFromList eqListTel1, telFromList eqListTel2)
 
   -- This is where the magic of higher-dimensional unification happens
   -- We need to generalize the indices `ixs` to the target indices of the
@@ -1029,14 +921,14 @@ unifyStep s (Injectivity k a d pars ixs c) = do
   -- recursively (this doesn't get stuck in a loop because a type should
   -- never be indexed over itself). Note the similarity with the
   -- computeNeighbourhood function in Agda.TypeChecking.Coverage.
-  let hduTel = eqTel1 `abstract` raise (size eqTel1) ctel
+  let hduTel = eqTel1 `abstract` ctel
       notforced = replicate (size hduTel) NotForced
   res <- liftTCM $ addContext (varTel s) $ unifyIndices
            hduTel
            (allFlexVars notforced hduTel)
-           (raise (size hduTel) dtype)
+           (raise (size ctel) dtype)
            (raise (size ctel) ixs)
-           (raiseFrom (size ctel) (size eqTel1) cixs)
+           cixs
   case res of
     -- Higher-dimensional unification can never end in a conflict,
     -- because `cong c1 ...` and `cong c2 ...` don't even have the
@@ -1048,7 +940,7 @@ unifyStep s (Injectivity k a d pars ixs c) = do
     -- simplify the equation as in the non-indexed case.
     DontKnow _ | not withoutK -> do
       -- using the same variable names as in the case where hdu succeeds.
-      let eqTel1' = eqTel1 `abstract` raise (size eqTel1) ctel
+      let eqTel1' = eqTel1 `abstract` ctel
           rho1    = raiseS (size ctel)
           ceq     = ConP c noConPatternInfo $ teleNamedArgs ctel
           rho3    = consS ceq rho1
@@ -1221,6 +1113,113 @@ unifyStep s (TypeConInjectivity k d us vs) = do
     , eqLHS = us ++ dropAt k (eqLHS s)
     , eqRHS = vs ++ dropAt k (eqRHS s)
     }
+
+data RetryNormalised = RetryNormalised | DontRetryNormalised
+  deriving (Eq, Show)
+
+solutionStep :: RetryNormalised -> UnifyState -> UnifyStep -> UnifyM (UnificationResult' UnifyState)
+solutionStep retry s
+  step@Solution{ solutionAt   = k
+               , solutionType = dom@Dom{ unDom = a }
+               , solutionVar  = fi@FlexibleVar{ flexVar = i }
+               , solutionTerm = u } = do
+  let m = varCount s
+
+  -- Now we have to be careful about forced variables in `u`. If they appear
+  -- in pattern positions we need to bind them there rather in their forced positions. We can safely
+  -- ignore non-pattern positions and forced pattern positions, because in that case there will be
+  -- other equations where the variable can be bound.
+  -- NOTE: If we're doing make-case we ignore forced variables. This is safe since we take the
+  -- result of unification and build user clauses that will be checked again with forcing turned on.
+  inMakeCase <- viewTC eMakeCase
+  let forcedVars | inMakeCase = IntMap.empty
+                 | otherwise  = IntMap.fromList [ (flexVar fi, getModality fi) | fi <- flexVars s,
+                                                                                 flexForced fi == Forced ]
+  (p, bound) <- patternBindingForcedVars forcedVars u
+
+  -- To maintain the invariant that each variable in varTel is bound exactly once in the pattern
+  -- subtitution we need to turn the bound variables in `p` into dot patterns in the rest of the
+  -- substitution.
+  let dotSub = foldr composeS idS [ inplaceS i (dotP (Var i [])) | i <- IntMap.keys bound ]
+
+  -- We moved the binding site of some forced variables, so we need to update their modalities in
+  -- the telescope. The new modality is the combination of the modality of the variable we are
+  -- instantiating and the modality of the binding site in the pattern (return by
+  -- patternBindingForcedVars).
+  let updModality md vars tel
+        | IntMap.null vars = tel
+        | otherwise        = telFromList $ zipWith upd (downFrom $ size tel) (telToList tel)
+        where
+          upd i a | Just md' <- IntMap.lookup i vars = setModality (md <> md') a
+                  | otherwise                        = a
+  s <- return $ s { varTel = updModality (getModality fi) bound (varTel s) }
+
+  reportSDoc "tc.lhs.unify.force" 45 $ vcat
+    [ "forcedVars =" <+> pretty (IntMap.keys forcedVars)
+    , "u          =" <+> prettyTCM u
+    , "p          =" <+> prettyTCM p
+    , "bound      =" <+> pretty (IntMap.keys bound)
+    , "dotSub     =" <+> pretty dotSub ]
+
+  -- Check that the type of the variable is equal to the type of the equation
+  -- (not just a subtype), otherwise we cannot instantiate (see Issue 2407).
+  let dom'@Dom{ unDom = a' } = getVarType (m-1-i) s
+  equalTypes <- liftTCM $ addContext (varTel s) $ tryCatch $ do
+    reportSDoc "tc.lhs.unify" 45 $ "Equation type: " <+> prettyTCM a
+    reportSDoc "tc.lhs.unify" 45 $ "Variable type: " <+> prettyTCM a'
+    dontAssignMetas $ noConstraints $ equalType a a'
+
+  -- The conditions on the relevances are as follows (see #2640):
+  -- - If the type of the equation is relevant, then the solution must be
+  --   usable in a relevant position.
+  -- - If the type of the equation is (shape-)irrelevant, then the solution
+  --   must be usable in a μ-relevant position where μ is the relevance
+  --   of the variable being solved.
+  --
+  -- Jesper, Andreas, 2018-10-17: the quantity of the equation is morally
+  -- always @Quantity0@, since the indices of the data type are runtime erased.
+  -- Thus, we need not change the quantity of the solution.
+  let eqrel  = getRelevance dom
+      eqmod  = getModality dom
+      varmod = getModality dom'
+      mod    = applyUnless (NonStrict `moreRelevant` eqrel) (setRelevance eqrel)
+             $ varmod
+  reportSDoc "tc.lhs.unify" 65 $ text $ "Equation modality: " ++ show (getModality dom)
+  reportSDoc "tc.lhs.unify" 65 $ text $ "Variable modality: " ++ show varmod
+  reportSDoc "tc.lhs.unify" 65 $ text $ "Solution must be usable in a " ++ show mod ++ " position."
+  -- Andreas, 2018-10-18
+  -- Currently, the modality check has problems with meta-variables created in the type signature,
+  -- and thus, in quantity 0, that get into terms using the unifier, and there are checked to be
+  -- non-erased, i.e., have quantity ω.
+  -- Ulf, 2019-12-13. We still do it though.
+  usable <- liftTCM $ addContext (varTel s) $ usableMod mod u
+  reportSDoc "tc.lhs.unify" 45 $ "Modality ok: " <+> prettyTCM usable
+  unless usable $ reportSLn "tc.lhs.unify" 65 $ "Rejected solution: " ++ show u
+
+  -- We need a Flat equality to solve a Flat variable.
+  -- This also ought to take care of the need for a usableCohesion check.
+  if not (getCohesion eqmod `moreCohesion` getCohesion varmod) then return $ DontKnow [] else do
+
+  case equalTypes of
+    Just err -> return $ DontKnow []
+    Nothing | usable ->
+      case solveVar (m - 1 - i) p s of
+        Nothing | retry == RetryNormalised -> do
+          u <- liftTCM $ normalise u
+          s <- liftTCM $ lensVarTel normalise s
+          solutionStep DontRetryNormalised s step{ solutionTerm = u }
+        Nothing ->
+          return $ DontKnow [UnifyRecursiveEq (varTel s) a i u]
+        Just (s', sub) -> do
+          let rho = sub `composeS` dotSub
+          tellUnifySubst rho
+          let (s'', sigma) = solveEq k (applyPatSubst rho u) s'
+          tellUnifyProof sigma
+          return $ Unifies s''
+          -- Andreas, 2019-02-23, issue #3578: do not eagerly reduce
+          -- Unifies <$> liftTCM (reduce s'')
+    Nothing -> return $ DontKnow [UnifyUnusableModality (varTel s) a i u mod]
+solutionStep _ _ _ = __IMPOSSIBLE__
 
 unify :: UnifyState -> UnifyStrategy -> UnifyM (UnificationResult' UnifyState)
 unify s strategy = if isUnifyStateSolved s

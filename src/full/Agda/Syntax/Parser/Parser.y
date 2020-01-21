@@ -985,7 +985,7 @@ DomainFreeBindingAbsurd
     | '.' BId  MaybeAsPattern { Left [mkDomainFree_ (setRelevance Irrelevant) $3 $2]  }
     | '..' BId MaybeAsPattern { Left [mkDomainFree_ (setRelevance NonStrict) $3 $2]  }
     | '(' Application ')'     {% exprToPattern (RawApp (getRange $2) $2) >>= \ p ->
-                                 pure $ Left [mkDomainFree_ id (Just p) (Name (getRange $2) InScope [Hole])] }
+                                 pure $ Left [mkDomainFree_ id (Just p) (Name noRange InScope [Hole])] }
     | '(' Attributes1 CommaBIdAndAbsurds ')'
          {% applyAttrs $2 defaultArgInfo <&> \ ai ->
               mapLeft (map (DomainFree . setTacticAttr $2 . setArgInfo ai)) $3 }
@@ -1213,20 +1213,16 @@ RHS : '=' Expr      { JustRHS (RHS $2) }
 -- Data declaration. Can be local.
 Data :: { Declaration }
 Data : 'data' Id TypedUntypedBindings ':' Expr 'where'
-            Declarations0       { Data (getRange ($1,$2,$3,$4,$5,$6,$7)) Inductive $2 $3 $5 $7 }
-     | 'codata' Id TypedUntypedBindings ':' Expr 'where'
-            Declarations0       { Data (getRange ($1,$2,$3,$4,$5,$6,$7)) CoInductive $2 $3 $5 $7 }
+            Declarations0       { Data (getRange ($1,$2,$3,$4,$5,$6,$7)) $2 $3 $5 $7 }
 
   -- New cases when we already had a DataSig.  Then one can omit the sort.
      | 'data' Id TypedUntypedBindings 'where'
-            Declarations0       { DataDef (getRange ($1,$2,$3,$4,$5)) Inductive $2 $3 $5 }
-     | 'codata' Id TypedUntypedBindings 'where'
-            Declarations0       { DataDef (getRange ($1,$2,$3,$4,$5)) CoInductive $2 $3 $5 }
+            Declarations0       { DataDef (getRange ($1,$2,$3,$4,$5)) $2 $3 $5 }
 
 -- Data type signature. Found in mutual blocks.
 DataSig :: { Declaration }
 DataSig : 'data' Id TypedUntypedBindings ':' Expr
-  { DataSig (getRange ($1,$2,$3,$4,$5)) Inductive $2 $3 $5 }
+  { DataSig (getRange ($1,$2,$3,$4,$5)) $2 $3 $5 }
 
 -- Andreas, 2012-03-16:  The Expr3NoCurly instead of Id in everything
 -- following 'record' is to remove the (harmless) shift/reduce conflict
@@ -1248,8 +1244,8 @@ RecordSig : 'record' Expr3NoCurly TypedUntypedBindings ':' Expr
 
 -- Declaration of record constructor name.
 RecordConstructorName :: { (Name, IsInstance) }
-RecordConstructorName :                  'constructor' Id        { ($2, NotInstanceDef) }
-                      | 'instance' vopen 'constructor' Id vclose { ($4, InstanceDef) }
+RecordConstructorName :                  'constructor' Id       { ($2, NotInstanceDef) }
+                      | 'instance' vopen 'constructor' Id close { ($4, InstanceDef) }
 
 -- Fixity declarations.
 Infix :: { Declaration }

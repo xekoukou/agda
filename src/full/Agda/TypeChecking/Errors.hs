@@ -1194,8 +1194,12 @@ instance PrettyTCM SplitError where
     IrrelevantDatatype t -> enterClosure t $ \ t -> fsep $
       pwords "Cannot split on argument of irrelevant datatype" ++ [prettyTCM t]
 
-    ErasedDatatype t -> enterClosure t $ \ t -> fsep $
-      pwords "Cannot branch on erased argument of datatype" ++ [prettyTCM t]
+    ErasedDatatype causedByWithoutK t -> enterClosure t $ \ t -> fsep $
+      pwords "Cannot branch on erased argument of datatype" ++
+      [prettyTCM t] ++
+      if causedByWithoutK
+      then pwords "because the K rule is turned off"
+      else []
 
     CoinductiveDatatype t -> enterClosure t $ \ t -> fsep $
       pwords "Cannot pattern match on the coinductive type" ++ [prettyTCM t]
@@ -1284,6 +1288,14 @@ instance PrettyTCM UnificationFailure where
       pwords "=" ++ [prettyTCM u] ++ pwords "of type" ++ [prettyTCM a] ++
       pwords "because K has been disabled."
 
+    UnifyUnusableModality tel a i u mod -> addContext tel $ fsep $
+      pwords "Cannot solve variable " ++ [prettyTCM (var i)] ++
+      pwords "of type " ++ [prettyTCM a] ++
+      pwords "with solution " ++ [prettyTCM u] ++
+      pwords "because the solution cannot be used at" ++
+             [ text (verbalize $ getRelevance mod) <> ","
+             , text $ verbalize $ getQuantity mod ] ++
+      pwords "modality"
 
 
 ---------------------------------------------------------------------------

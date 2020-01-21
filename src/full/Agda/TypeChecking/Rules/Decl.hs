@@ -633,6 +633,12 @@ checkAxiom' gentel funSig i info0 mp x e = whenAbstractFreezeMetasAfter i $ defa
         prettyShow occs ++ "\n  " ++ prettyShow pols
       return (occs, pols)
 
+
+  -- Set blocking tag to MissingClauses if we still expect clauses
+  let blk = case funSig of
+        A.FunSig{}   -> NotBlocked MissingClauses   ()
+        A.NoFunSig{} -> NotBlocked ReallyNotBlocked ()
+
   -- Not safe. See Issue 330
   -- t <- addForcingAnnotations t
   addConstant x =<< do
@@ -645,6 +651,7 @@ checkAxiom' gentel funSig i info0 mp x e = whenAbstractFreezeMetasAfter i $ defa
         { defArgOccurrences    = occs
         , defPolarity          = pols
         , defGeneralizedParams = genParams
+        , defBlocked           = blk
         }
 
   -- Add the definition to the instance table, if needed
